@@ -1,8 +1,10 @@
+// page.tsx - نسخة كاملة مع رفع الصور وحفظها في Supabase
+
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { User, Bell, Lock, Globe, Trash2, Moon, Sun, Monitor, Save, LogOut } from 'lucide-react'
+import { User, Bell, Lock, Globe, Trash2, Moon, Sun, Monitor, Save, LogOut, Upload, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -11,7 +13,8 @@ import { Toggle } from '@/components/ui/toggle'
 import { ConfirmModal } from '@/components/ui/modal'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/lib/i18n/context'
-import { updatePassword, signOutAll } from '@/lib/auth'
+import { updatePassword, signOutAll, getCurrentUser, getUserProfile, updateProfile } from '@/lib/auth'
+import { createClient } from '@/lib/supabase/client'
 import type { Language } from '@/types'
 
 const LANGUAGES: { code: Language; label: string; native: string; flag: string }[] = [
@@ -33,11 +36,19 @@ export default function SettingsPage() {
   const router = useRouter()
   const { language, setLanguage } = useI18n()
   const [activeTab, setActiveTab] = useState('profile')
-  const [displayName, setDisplayName] = useState('John Doe')
+  const [displayName, setDisplayName] = useState('')
+  const [email, setEmail] = useState('')
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  const [avatarFile, setAvatarFile] = useState<File | null>(null)
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [timezone, setTimezone] = useState('America/New_York')
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('light')
   const [deleteModal, setDeleteModal] = useState(false)
   const [signOutAllModal, setSignOutAllModal] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [userId, setUserId] = useState<string | null>(null)
   const [notifs, setNotifs] = useState({
     postPublished: true, postFailed: true, botReplies: false, weeklyReport: true, planExpiring: true,
   })
@@ -47,10 +58,187 @@ export default function SettingsPage() {
   const [passwordLoading, setPasswordLoading] = useState(false)
   const [signOutAllLoading, setSignOutAllLoading] = useState(false)
 
+  const supabase = createClient()
+
+  // تحميل بيانات المستخدم
+  useEffect(() => {
+    loadUserData()
+  }, [])
+
+  const loadUserData = async () => {
+    setLoading(true)
+    try {
+      const user = await getCurrentUser()
+      if (!user) {
+        router.push('/login')
+        return
+      }
+      
+      setUserId(user.id)
+      setEmail(user.email || '')
+      
+      // جلب بيانات الملف الشخصي من جدول users
+      const profile = await getUserProfile(user.id)
+      if (profile) {
+        setDisplayName(profile.full_name || user.user_metadata?.full_name || '')
+        if (profile.avatar_url) {
+          setAvatarUrl(profile.avatar_url)
+          setAvatarPreview(profile.avatar_url)
+        }
+      } else {
+        setDisplayName(user.user_metadata?.full_name || '')
+      }
+      
+      // جلب إعدادات الثيم
+      const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | 'system' || 'light'
+      setTheme(savedTheme)
+      if (savedTheme === 'dark') document.documentElement.classList.add('dark')
+      
+    } catch (error) {
+      console.error('Error loading user data:', error)
+      toast.error('Failed to load user data')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // رفع الصورة إلى Supabase Storage
+  const uploadAvatar = async (file: File): Promise<string | null> => {
+    if (!userId) return null
+    
+    const fileExt = file.name.split('.').pop()
+    const fileName = `${userId}/avatar-${Date.now()}.${fileExt}`
+    const filePath = `avatars/${fileName}`
+    
+    try {
+      // رفع الملف
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file, { upsert: true })
+      
+      if (uploadError) throw uploadError
+      
+      // الحصول على الرابط العام
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath)
+      
+      return publicUrl
+    } catch (error) {
+      console.error('Error uploading avatar:', error)
+      return null
+    }
+  }
+
+  // حذف الصورة القديمة
+  const deleteOldAvatar = async (oldUrl: string | null) => {
+    if (!oldUrl) return
+    
+    try {
+      const path = oldUrl.split('/avatars/')[1]
+      if (path) {
+        await supabase.storage.from('avatars').remove([path])
+      }
+    } catch (error) {
+      console.error('Error deleting old avatar:', error)
+    }
+  }
+
+  // معالجة اختيار الصورة
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    
+    // التحقق من نوع الملف
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file')
+      return
+    }
+    
+    // التحقق من الحجم (أقصى 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Image size must be less than 2MB')
+      return
+    }
+    
+    setAvatarFile(file)
+    const preview = URL.createObjectURL(file)
+    setAvatarPreview(preview)
+  }
+
+  // إزالة الصورة المختارة
+  const handleRemoveAvatar = () => {
+    setAvatarFile(null)
+    setAvatarPreview(avatarUrl)
+    if (avatarPreview && avatarPreview !== avatarUrl) {
+      URL.revokeObjectURL(avatarPreview)
+    }
+  }
+
+  // حفظ الملف الشخصي
+  const handleSaveProfile = async () => {
+    if (!userId) {
+      toast.error('User not found')
+      return
+    }
+    
+    setSaving(true)
+    
+    try {
+      let newAvatarUrl = avatarUrl
+      
+      // رفع الصورة الجديدة إذا وجدت
+      if (avatarFile) {
+        setUploading(true)
+        const uploadedUrl = await uploadAvatar(avatarFile)
+        if (uploadedUrl) {
+          // حذف الصورة القديمة
+          await deleteOldAvatar(avatarUrl)
+          newAvatarUrl = uploadedUrl
+        }
+        setUploading(false)
+      }
+      
+      // تحديث بيانات المستخدم في جدول users
+      const { error } = await updateProfile(userId, {
+        full_name: displayName,
+        avatar_url: newAvatarUrl,
+        updated_at: new Date().toISOString()
+      })
+      
+      if (error) throw error
+      
+      // تحديث metadata في auth.users
+      await supabase.auth.updateUser({
+        data: { full_name: displayName }
+      })
+      
+      setAvatarUrl(newAvatarUrl)
+      setAvatarFile(null)
+      toast.success('Profile saved successfully!')
+      
+    } catch (error) {
+      console.error('Error saving profile:', error)
+      toast.error('Failed to save profile')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const handleTheme = (t: 'light' | 'dark' | 'system') => {
     setTheme(t)
-    if (t === 'dark') document.documentElement.classList.add('dark')
-    else document.documentElement.classList.remove('dark')
+    if (t === 'dark') {
+      document.documentElement.classList.add('dark')
+      localStorage.setItem('theme', 'dark')
+    } else if (t === 'light') {
+      document.documentElement.classList.remove('dark')
+      localStorage.setItem('theme', 'light')
+    } else {
+      const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+      if (systemDark) document.documentElement.classList.add('dark')
+      else document.documentElement.classList.remove('dark')
+      localStorage.setItem('theme', 'system')
+    }
   }
 
   const handleChangePassword = async () => {
@@ -73,6 +261,14 @@ export default function SettingsPage() {
     setSignOutAllLoading(false)
     if (error) { toast.error(error.message); return }
     router.push('/login')
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    )
   }
 
   return (
@@ -105,22 +301,72 @@ export default function SettingsPage() {
               <CardHeader><CardTitle>Profile Information</CardTitle></CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 rounded-full bg-blue-600 flex items-center justify-center text-white text-2xl font-bold flex-shrink-0">
-                    {displayName[0]?.toUpperCase() || 'U'}
+                  {/* صورة الملف الشخصي */}
+                  <div className="relative">
+                    <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-2xl font-bold flex-shrink-0 overflow-hidden">
+                      {avatarPreview ? (
+                        <img src={avatarPreview} alt="Avatar" className="w-full h-full object-cover" />
+                      ) : (
+                        displayName[0]?.toUpperCase() || 'U'
+                      )}
+                    </div>
+                    
+                    {/* زر رفع الصورة */}
+                    <label className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-blue-600 hover:bg-blue-700 flex items-center justify-center cursor-pointer shadow-lg transition-colors">
+                      <Upload size={14} className="text-white" />
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleAvatarChange}
+                        className="hidden"
+                        disabled={uploading}
+                      />
+                    </label>
+                    
+                    {/* زر إزالة الصورة */}
+                    {avatarPreview && avatarPreview !== avatarUrl && (
+                      <button
+                        onClick={handleRemoveAvatar}
+                        className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center shadow-lg transition-colors"
+                      >
+                        <X size={12} className="text-white" />
+                      </button>
+                    )}
                   </div>
+                  
                   <div>
-                    <Button variant="outline" size="sm">Change Photo</Button>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      {avatarFile ? 'New image selected' : avatarUrl ? 'Avatar uploaded' : 'No avatar'}
+                    </p>
                     <p className="text-xs text-gray-400 mt-1">JPG, PNG or GIF. Max 2MB.</p>
+                    {uploading && <p className="text-xs text-blue-500 mt-1">Uploading...</p>}
                   </div>
                 </div>
-                <Input label="Full Name" value={displayName} onChange={e => setDisplayName(e.target.value)} />
-                <Input label="Email" value="john@example.com" disabled helperText="Contact support to change your email." />
+                
+                <Input 
+                  label="Full Name" 
+                  value={displayName} 
+                  onChange={e => setDisplayName(e.target.value)} 
+                  placeholder="Enter your full name"
+                />
+                
+                <Input 
+                  label="Email" 
+                  value={email} 
+                  disabled 
+                  helperText="Contact support to change your email." 
+                />
+                
                 <div>
                   <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 block">Timezone</label>
-                  <select value={timezone} onChange={e => setTimezone(e.target.value)} className="w-full px-3 py-2.5 text-sm rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <select 
+                    value={timezone} 
+                    onChange={e => setTimezone(e.target.value)} 
+                    className="w-full px-3 py-2.5 text-sm rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
                     <option value="America/New_York">Eastern Time (ET)</option>
                     <option value="America/Chicago">Central Time (CT)</option>
-                    <option value="America/Los_Angeles">Pacific Time (PT)</option>
+option value="America/Los_Angeles">Pacific Time (PT)</option>
                     <option value="America/Toronto">Toronto (ET)</option>
                     <option value="America/Vancouver">Vancouver (PT)</option>
                     <option value="Europe/London">London (GMT)</option>
@@ -128,7 +374,11 @@ export default function SettingsPage() {
                     <option value="Asia/Dubai">Dubai (GST)</option>
                   </select>
                 </div>
-                <Button onClick={() => toast.success('Profile saved!')}><Save size={14} />Save Changes</Button>
+                
+                <Button onClick={handleSaveProfile} loading={saving || uploading}>
+                  <Save size={14} />
+                  {saving || uploading ? 'Saving...' : 'Save Changes'}
+                </Button>
               </CardContent>
             </Card>
           )}
