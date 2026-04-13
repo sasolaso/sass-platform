@@ -1,7 +1,4 @@
-// page.tsx - نسخة كاملة مع رفع الصور وحفظها في Supabase
-
 'use client'
-
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { User, Bell, Lock, Globe, Trash2, Moon, Sun, Monitor, Save, LogOut, Upload, X } from 'lucide-react'
