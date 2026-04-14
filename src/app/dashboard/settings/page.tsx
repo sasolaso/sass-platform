@@ -2,7 +2,12 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { User, Bell, Lock, Globe, Trash2, Moon, Sun, Monitor, Save, LogOut, Upload, X, Loader2, Calendar, Image, Inbox, Bot, BarChart3, TrendingUp, Link2, CreditCard, Settings, HelpCircle, Plus, LayoutDashboard } from 'lucide-react'
+import { 
+  User, Bell, Lock, Globe, Trash2, Moon, Sun, Monitor, Save, LogOut, 
+  Upload, X, Loader2, Calendar, Image, Inbox, Bot, BarChart3, 
+  TrendingUp, Link2, CreditCard, Settings, HelpCircle, Plus, LayoutDashboard,
+  ChevronLeft, ChevronRight
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -31,18 +36,19 @@ const TABS = [
 ]
 
 const SIDEBAR_MENU = [
-  { id: 'create-post', label: 'Create a post', icon: Plus },
-  { id: 'content-calendar', label: 'Content calendar', icon: Calendar },
-  { id: 'media-library', label: 'Media library', icon: Image },
-  { id: 'inbox', label: 'Inbox', icon: Inbox },
-  { id: 'ai-writer', label: 'AI Writer', icon: Bot },
-  { id: 'bot-settings', label: 'Bot settings', icon: Settings },
-  { id: 'analytics', label: 'Analytics & reports', icon: BarChart3 },
-  { id: 'competitors', label: 'Competitors analysis', icon: TrendingUp },
-  { id: 'connected-accounts', label: 'Connected accounts', icon: Link2 },
-  { id: 'billing', label: 'Billing & plans', icon: CreditCard },
-  { id: 'settings', label: 'Settings', icon: Settings },
-  { id: 'help', label: 'Help & support', icon: HelpCircle },
+  { id: 'dashboard', label: 'Tableau de bord', icon: LayoutDashboard },
+  { id: 'create-post', label: 'Créer un post', icon: Plus },
+  { id: 'content-calendar', label: 'Calendrier de contenu', icon: Calendar },
+  { id: 'media-library', label: 'Médiathèque', icon: Image },
+  { id: 'inbox', label: 'Boîte de réception', icon: Inbox },
+  { id: 'ai-writer', label: 'Rédacteur IA', icon: Bot },
+  { id: 'bot-settings', label: 'Paramètres du bot', icon: Settings },
+  { id: 'analytics', label: 'Analytique et rapports', icon: BarChart3 },
+  { id: 'competitors', label: 'Analyse des concurrents', icon: TrendingUp },
+  { id: 'connected-accounts', label: 'Comptes connectés', icon: Link2 },
+  { id: 'billing', label: 'Facturation et plans', icon: CreditCard },
+  { id: 'settings', label: 'Paramètres', icon: Settings },
+  { id: 'help', label: 'Aide et support', icon: HelpCircle },
 ]
 
 export default function SettingsPage() {
@@ -89,17 +95,17 @@ export default function SettingsPage() {
       }
       
       setUserId(user.id)
-      setEmail(user.email || 'salah zelas')
+      setEmail(user.email || 'zelasasalah@gmail.com')
       
       const profile = await getUserProfile(user.id)
       if (profile) {
-        setDisplayName(profile.full_name || user.user_metadata?.full_name || 'salah zelas')
+        setDisplayName(profile.display_name || user.user_metadata?.display_name || user.user_metadata?.full_name || 'salah zelas')
         if (profile.avatar_url) {
           setAvatarUrl(profile.avatar_url)
           setAvatarPreview(profile.avatar_url)
         }
       } else {
-        setDisplayName(user.user_metadata?.full_name || 'salah zelas')
+        setDisplayName(user.user_metadata?.display_name || user.user_metadata?.full_name || 'salah zelas')
       }
       
       const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | 'system' || 'light'
@@ -192,58 +198,57 @@ export default function SettingsPage() {
   }
 
   const handleSaveProfile = async () => {
-  if (!userId) {
-    toast.error('User not found')
-    return
-  }
-  
-  setSaving(true)
-  
-  try {
-    let newAvatarUrl = avatarUrl
-    
-    if (avatarFile) {
-      setUploading(true)
-      const uploadedUrl = await uploadAvatar(avatarFile)
-      setUploading(false)
-      
-      if (uploadedUrl) {
-        await deleteOldAvatar(avatarUrl)
-        newAvatarUrl = uploadedUrl
-      } else {
-        toast.error('Failed to upload image')
-        setSaving(false)
-        return
-      }
+    if (!userId) {
+      toast.error('User not found')
+      return
     }
     
-    // ✅ التعديل هنا: تحويل null إلى undefined
-    const { error } = await updateProfile(userId, {
-      display_name: displayName,
-      avatar_url: newAvatarUrl ?? undefined,  // هذا هو التغيير المطلوب
-      updated_at: new Date().toISOString()
-    })
+    setSaving(true)
     
-    if (error) throw error
-    
-    await supabase.auth.updateUser({
-      data: { 
-        display_name: displayName,
-        full_name: displayName 
+    try {
+      let newAvatarUrl = avatarUrl
+      
+      if (avatarFile) {
+        setUploading(true)
+        const uploadedUrl = await uploadAvatar(avatarFile)
+        setUploading(false)
+        
+        if (uploadedUrl) {
+          await deleteOldAvatar(avatarUrl)
+          newAvatarUrl = uploadedUrl
+        } else {
+          toast.error('Failed to upload image')
+          setSaving(false)
+          return
+        }
       }
-    })
-    
-    setAvatarUrl(newAvatarUrl)
-    setAvatarFile(null)
-    toast.success('Profile saved successfully!')
-    
-  } catch (error: any) {
-    console.error('Error saving profile:', error)
-    toast.error(error.message || 'Failed to save profile')
-  } finally {
-    setSaving(false)
+      
+      const { error } = await updateProfile(userId, {
+        display_name: displayName,
+        avatar_url: newAvatarUrl ?? undefined,
+        updated_at: new Date().toISOString()
+      })
+      
+      if (error) throw error
+      
+      await supabase.auth.updateUser({
+        data: { 
+          display_name: displayName,
+          full_name: displayName 
+        }
+      })
+      
+      setAvatarUrl(newAvatarUrl)
+      setAvatarFile(null)
+      toast.success('Profile saved successfully!')
+      
+    } catch (error: any) {
+      console.error('Error saving profile:', error)
+      toast.error(error.message || 'Failed to save profile')
+    } finally {
+      setSaving(false)
+    }
   }
-}
 
   const handleTheme = (t: 'light' | 'dark' | 'system') => {
     setTheme(t)
@@ -315,7 +320,7 @@ export default function SettingsPage() {
 
       {/* القائمة الجانبية */}
       <aside className={cn(
-        "fixed right-0 top-0 h-full bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 transition-all duration-300 z-20 overflow-y-auto",
+        "fixed left-0 top-0 h-full bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 transition-all duration-300 z-20 overflow-y-auto",
         sidebarCollapsed ? "w-20" : "w-64"
       )}>
         <div className="p-4 border-b border-gray-200 dark:border-gray-800">
@@ -334,7 +339,7 @@ export default function SettingsPage() {
             <button
               key={item.id}
               className={cn(
-                "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-right transition-colors",
+                "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-left transition-colors",
                 item.id === 'settings' 
                   ? "bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400" 
                   : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
@@ -346,6 +351,7 @@ export default function SettingsPage() {
           ))}
         </nav>
         
+        {/* قسم المستخدم في أسفل القائمة */}
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold flex-shrink-0 overflow-hidden">
@@ -356,14 +362,14 @@ export default function SettingsPage() {
               )}
             </div>
             {!sidebarCollapsed && (
-              <div className="flex-1 text-right">
+              <div className="flex-1">
                 <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{displayName}</p>
                 <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{email}</p>
                 <button 
                   onClick={handleLogout}
                   className="text-xs text-red-500 hover:text-red-600 mt-1"
                 >
-                  Sign out
+                  Se déconnecter
                 </button>
               </div>
             )}
@@ -371,18 +377,22 @@ export default function SettingsPage() {
         </div>
       </aside>
 
+      {/* زر تصغير/تكبير القائمة */}
+      <button
+        onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+        className={cn(
+          "fixed top-6 z-30 p-2 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-all",
+          sidebarCollapsed ? "left-20" : "left-64"
+        )}
+      >
+        {sidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+      </button>
+
       {/* المحتوى الرئيسي */}
       <main className={cn(
         "flex-1 transition-all duration-300 p-6",
-        sidebarCollapsed ? "mr-20" : "mr-64"
+        sidebarCollapsed ? "ml-20" : "ml-64"
       )}>
-        <button
-          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          className="fixed top-6 right-72 z-30 p-2 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-all"
-        >
-          {sidebarCollapsed ? "→" : "←"}
-        </button>
-
         <div className="max-w-4xl mx-auto">
           <div className="mb-6">
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Settings</h1>
@@ -390,13 +400,14 @@ export default function SettingsPage() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            {/* تبويبات جانبية */}
             <nav className="space-y-1">
               {TABS.map(tab => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={cn(
-                    'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-right transition-colors',
+                    'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-left transition-colors',
                     activeTab === tab.id ? 'bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
                   )}
                 >
@@ -406,6 +417,7 @@ export default function SettingsPage() {
               ))}
             </nav>
 
+            {/* محتوى التبويب النشط */}
             <div className="lg:col-span-3">
               {activeTab === 'profile' && (
                 <Card>
@@ -413,6 +425,7 @@ export default function SettingsPage() {
                     <CardTitle>Profile Information</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
+                    {/* صورة الملف الشخصي */}
                     <div className="flex items-center gap-4">
                       <div className="relative">
                         <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-2xl font-bold flex-shrink-0 overflow-hidden">
@@ -501,7 +514,6 @@ export default function SettingsPage() {
                 </Card>
               )}
 
-              {/* باقي التابات بنفس الشكل السابق */}
               {activeTab === 'notifications' && (
                 <Card>
                   <CardHeader><CardTitle>Notification Preferences</CardTitle></CardHeader>
@@ -603,7 +615,7 @@ export default function SettingsPage() {
                           <button
                             key={lang.code}
                             onClick={() => setLanguage(lang.code)}
-                            className={cn('flex items-center gap-3 p-3 rounded-xl border-2 text-right transition-all',
+                            className={cn('flex items-center gap-3 p-3 rounded-xl border-2 text-left transition-all',
                               language === lang.code ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
                             )}
                           >
