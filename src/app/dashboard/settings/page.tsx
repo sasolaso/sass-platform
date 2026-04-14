@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { User, Bell, Lock, Globe, Trash2, Moon, Sun, Monitor, Save, LogOut, Upload, X, Loader2, Calendar, Image, Inbox, Bot, BarChart3, TrendingUp, Link2, CreditCard, Settings, HelpCircle, Plus, LayoutDashboard } from 'lucide-react'
 import { toast } from 'sonner'
@@ -30,7 +30,6 @@ const TABS = [
   { id: 'data', label: 'Data & Privacy', icon: Trash2 },
 ]
 
-// قائمة عناصر القائمة الجانبية
 const SIDEBAR_MENU = [
   { id: 'create-post', label: 'Create a post', icon: Plus },
   { id: 'content-calendar', label: 'Content calendar', icon: Calendar },
@@ -72,10 +71,10 @@ export default function SettingsPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [passwordLoading, setPasswordLoading] = useState(false)
   const [signOutAllLoading, setSignOutAllLoading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const supabase = createClient()
 
-  // تحميل بيانات المستخدم
   useEffect(() => {
     loadUserData()
   }, [])
@@ -92,7 +91,6 @@ export default function SettingsPage() {
       setUserId(user.id)
       setEmail(user.email || 'salah zelas')
       
-      // جلب بيانات الملف الشخصي من جدول users
       const profile = await getUserProfile(user.id)
       if (profile) {
         setDisplayName(profile.full_name || user.user_metadata?.full_name || 'salah zelas')
@@ -104,7 +102,6 @@ export default function SettingsPage() {
         setDisplayName(user.user_metadata?.full_name || 'salah zelas')
       }
       
-      // جلب إعدادات الثيم
       const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | 'system' || 'light'
       setTheme(savedTheme)
       if (savedTheme === 'dark') document.documentElement.classList.add('dark')
@@ -117,7 +114,6 @@ export default function SettingsPage() {
     }
   }
 
-  // رفع الصورة إلى Supabase Storage
   const uploadAvatar = async (file: File): Promise<string | null> => {
     if (!userId) {
       toast.error('User not found')
@@ -129,8 +125,6 @@ export default function SettingsPage() {
     const filePath = fileName
     
     try {
-      console.log('Uploading to path:', filePath)
-      
       const { error: uploadError } = await supabase.storage
         .from('avatars')
         .upload(filePath, file, {
@@ -138,16 +132,12 @@ export default function SettingsPage() {
           upsert: true
         })
       
-      if (uploadError) {
-        console.error('Upload error:', uploadError)
-        throw uploadError
-      }
+      if (uploadError) throw uploadError
       
       const { data: { publicUrl } } = supabase.storage
         .from('avatars')
         .getPublicUrl(filePath)
       
-      console.log('Public URL:', publicUrl)
       return publicUrl
       
     } catch (error: any) {
@@ -157,7 +147,6 @@ export default function SettingsPage() {
     }
   }
 
-  // حذف الصورة القديمة
   const deleteOldAvatar = async (oldUrl: string | null) => {
     if (!oldUrl) return
     
@@ -171,7 +160,6 @@ export default function SettingsPage() {
     }
   }
 
-  // معالجة اختيار الصورة
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -192,16 +180,17 @@ export default function SettingsPage() {
     setAvatarPreview(preview)
   }
 
-  // إزالة الصورة المختارة
   const handleRemoveAvatar = () => {
     if (avatarPreview && avatarPreview !== avatarUrl) {
       URL.revokeObjectURL(avatarPreview)
     }
     setAvatarFile(null)
     setAvatarPreview(avatarUrl)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
   }
 
-  // حفظ الملف الشخصي
   const handleSaveProfile = async () => {
     if (!userId) {
       toast.error('User not found')
@@ -234,10 +223,7 @@ export default function SettingsPage() {
         updated_at: new Date().toISOString()
       })
       
-      if (error) {
-        console.error('Error updating profile:', error)
-        throw error
-      }
+      if (error) throw error
       
       await supabase.auth.updateUser({
         data: { full_name: displayName }
@@ -312,6 +298,17 @@ export default function SettingsPage() {
 
   return (
     <div className="flex min-h-screen bg-gray-50 dark:bg-gray-950">
+      {/* Input file مخفي */}
+      <input
+        ref={fileInputRef}
+        id="avatar-input"
+        type="file"
+        accept="image/jpeg,image/png,image/gif,image/webp"
+        onChange={handleAvatarChange}
+        className="hidden"
+        disabled={uploading}
+      />
+
       {/* القائمة الجانبية */}
       <aside className={cn(
         "fixed right-0 top-0 h-full bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 transition-all duration-300 z-20 overflow-y-auto",
@@ -345,7 +342,6 @@ export default function SettingsPage() {
           ))}
         </nav>
         
-        {/* قسم المستخدم في أسفل القائمة */}
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold flex-shrink-0 overflow-hidden">
@@ -376,7 +372,6 @@ export default function SettingsPage() {
         "flex-1 transition-all duration-300 p-6",
         sidebarCollapsed ? "mr-20" : "mr-64"
       )}>
-        {/* زر تصغير القائمة */}
         <button
           onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
           className="fixed top-6 right-72 z-30 p-2 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-all"
@@ -414,7 +409,6 @@ export default function SettingsPage() {
                     <CardTitle>Profile Information</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    {/* قسم الصورة الشخصية */}
                     <div className="flex items-center gap-4">
                       <div className="relative">
                         <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-2xl font-bold flex-shrink-0 overflow-hidden">
@@ -451,7 +445,11 @@ export default function SettingsPage() {
                       </div>
                       
                       <div>
-                        <Button variant="outline" size="sm" onClick={() => document.getElementById('avatar-input')?.click()}>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => fileInputRef.current?.click()}
+                        >
                           Change Photo
                         </Button>
                         <p className="text-xs text-gray-400 mt-1">JPG, PNG or GIF. Max 2MB.</p>
@@ -499,6 +497,7 @@ export default function SettingsPage() {
                 </Card>
               )}
 
+              {/* باقي التابات بنفس الشكل السابق */}
               {activeTab === 'notifications' && (
                 <Card>
                   <CardHeader><CardTitle>Notification Preferences</CardTitle></CardHeader>
