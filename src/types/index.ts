@@ -9,6 +9,7 @@ export interface UserProfile {
   id: string
   email: string
   display_name: string
+  full_name?: string | null
   avatar_url: string
   language: Language
   theme: Theme
