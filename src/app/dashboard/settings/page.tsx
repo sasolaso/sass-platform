@@ -1,7 +1,8 @@
 'use client'
+
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { User, Bell, Lock, Globe, Trash2, Moon, Sun, Monitor, Save, LogOut, Upload, X } from 'lucide-react'
+import { User, Bell, Lock, Globe, Trash2, Moon, Sun, Monitor, Save, LogOut, Upload, X, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -101,28 +102,43 @@ export default function SettingsPage() {
 
   // رفع الصورة إلى Supabase Storage
   const uploadAvatar = async (file: File): Promise<string | null> => {
-    if (!userId) return null
+    if (!userId) {
+      toast.error('User not found')
+      return null
+    }
     
+    // إنشاء اسم ملف فريد
     const fileExt = file.name.split('.').pop()
     const fileName = `${userId}/avatar-${Date.now()}.${fileExt}`
-    const filePath = `avatars/${fileName}`
+    const filePath = fileName
     
     try {
+      console.log('Uploading to path:', filePath)
+      
       // رفع الملف
       const { error: uploadError } = await supabase.storage
         .from('avatars')
-        .upload(filePath, file, { upsert: true })
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: true // استبدال الملف إذا كان موجوداً
+        })
       
-      if (uploadError) throw uploadError
+      if (uploadError) {
+        console.error('Upload error:', uploadError)
+        throw uploadError
+      }
       
       // الحصول على الرابط العام
       const { data: { publicUrl } } = supabase.storage
         .from('avatars')
         .getPublicUrl(filePath)
       
+      console.log('Public URL:', publicUrl)
       return publicUrl
-    } catch (error) {
+      
+    } catch (error: any) {
       console.error('Error uploading avatar:', error)
+      toast.error(error.message || 'Failed to upload image')
       return null
     }
   }
@@ -132,9 +148,18 @@ export default function SettingsPage() {
     if (!oldUrl) return
     
     try {
+      // استخراج المسار من الرابط
       const path = oldUrl.split('/avatars/')[1]
       if (path) {
-        await supabase.storage.from('avatars').remove([path])
+        const { error } = await supabase.storage
+          .from('avatars')
+          .remove([path])
+        
+        if (error) {
+          console.error('Error deleting old avatar:', error)
+        } else {
+          console.log('Old avatar deleted successfully')
+        }
       }
     } catch (error) {
       console.error('Error deleting old avatar:', error)
@@ -147,8 +172,9 @@ export default function SettingsPage() {
     if (!file) return
     
     // التحقق من نوع الملف
-    if (!file.type.startsWith('image/')) {
-      toast.error('Please select an image file')
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+    if (!allowedTypes.includes(file.type)) {
+      toast.error('Please select a valid image (JPEG, PNG, GIF, or WEBP)')
       return
     }
     
@@ -165,11 +191,11 @@ export default function SettingsPage() {
 
   // إزالة الصورة المختارة
   const handleRemoveAvatar = () => {
-    setAvatarFile(null)
-    setAvatarPreview(avatarUrl)
     if (avatarPreview && avatarPreview !== avatarUrl) {
       URL.revokeObjectURL(avatarPreview)
     }
+    setAvatarFile(null)
+    setAvatarPreview(avatarUrl)
   }
 
   // حفظ الملف الشخصي
@@ -188,12 +214,17 @@ export default function SettingsPage() {
       if (avatarFile) {
         setUploading(true)
         const uploadedUrl = await uploadAvatar(avatarFile)
+        setUploading(false)
+        
         if (uploadedUrl) {
           // حذف الصورة القديمة
           await deleteOldAvatar(avatarUrl)
           newAvatarUrl = uploadedUrl
+        } else {
+          toast.error('Failed to upload image')
+          setSaving(false)
+          return
         }
-        setUploading(false)
       }
       
       // تحديث بيانات المستخدم في جدول users
@@ -203,20 +234,32 @@ export default function SettingsPage() {
         updated_at: new Date().toISOString()
       })
       
-      if (error) throw error
+      if (error) {
+        console.error('Error updating profile:', error)
+        throw error
+      }
       
       // تحديث metadata في auth.users
-      await supabase.auth.updateUser({
+      const { error: authError } = await supabase.auth.updateUser({
         data: { full_name: displayName }
       })
+      
+      if (authError) {
+        console.error('Error updating auth metadata:', authError)
+      }
       
       setAvatarUrl(newAvatarUrl)
       setAvatarFile(null)
       toast.success('Profile saved successfully!')
       
-    } catch (error) {
+      // إعادة تحميل الصفحة لتحديث البيانات
+      setTimeout(() => {
+        window.location.reload()
+      }, 1500)
+      
+    } catch (error: any) {
       console.error('Error saving profile:', error)
-      toast.error('Failed to save profile')
+      toast.error(error.message || 'Failed to save profile')
     } finally {
       setSaving(false)
     }
@@ -263,7 +306,7 @@ export default function SettingsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <Loader2 className="h-12 w-12 animate-spin text-blue-600" />
       </div>
     )
   }
@@ -310,10 +353,14 @@ export default function SettingsPage() {
                     
                     {/* زر رفع الصورة */}
                     <label className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-blue-600 hover:bg-blue-700 flex items-center justify-center cursor-pointer shadow-lg transition-colors">
-                      <Upload size={14} className="text-white" />
+                      {uploading ? (
+                        <Loader2 size={14} className="text-white animate-spin" />
+                      ) : (
+                        <Upload size={14} className="text-white" />
+                      )}
                       <input
                         type="file"
-                        accept="image/*"
+                        accept="image/jpeg,image/png,image/gif,image/webp"
                         onChange={handleAvatarChange}
                         className="hidden"
                         disabled={uploading}
@@ -321,7 +368,7 @@ export default function SettingsPage() {
                     </label>
                     
                     {/* زر إزالة الصورة */}
-                    {avatarPreview && avatarPreview !== avatarUrl && (
+                    {avatarFile && (
                       <button
                         onClick={handleRemoveAvatar}
                         className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center shadow-lg transition-colors"
@@ -333,10 +380,9 @@ export default function SettingsPage() {
                   
                   <div>
                     <p className="text-sm text-gray-500 dark:text-gray-400">
-                      {avatarFile ? 'New image selected' : avatarUrl ? 'Avatar uploaded' : 'No avatar'}
+                      {uploading ? 'Uploading...' : avatarFile ? 'New image ready' : avatarUrl ? 'Avatar uploaded' : 'No avatar'}
                     </p>
-                    <p className="text-xs text-gray-400 mt-1">JPG, PNG or GIF. Max 2MB.</p>
-                    {uploading && <p className="text-xs text-blue-500 mt-1">Uploading...</p>}
+                    <p className="text-xs text-gray-400 mt-1">JPEG, PNG, GIF, WEBP. Max 2MB.</p>
                   </div>
                 </div>
                 
@@ -363,7 +409,7 @@ export default function SettingsPage() {
                   >
                     <option value="America/New_York">Eastern Time (ET)</option>
                     <option value="America/Chicago">Central Time (CT)</option>
-option value="America/Los_Angeles">Pacific Time (PT)</option>
+                    <option value="America/Los_Angeles">Pacific Time (PT)</option>
                     <option value="America/Toronto">Toronto (ET)</option>
                     <option value="America/Vancouver">Vancouver (PT)</option>
                     <option value="Europe/London">London (GMT)</option>
