@@ -192,54 +192,58 @@ export default function SettingsPage() {
   }
 
   const handleSaveProfile = async () => {
-    if (!userId) {
-      toast.error('User not found')
-      return
-    }
-    
-    setSaving(true)
-    
-    try {
-      let newAvatarUrl = avatarUrl
-      
-      if (avatarFile) {
-        setUploading(true)
-        const uploadedUrl = await uploadAvatar(avatarFile)
-        setUploading(false)
-        
-        if (uploadedUrl) {
-          await deleteOldAvatar(avatarUrl)
-          newAvatarUrl = uploadedUrl
-        } else {
-          toast.error('Failed to upload image')
-          setSaving(false)
-          return
-        }
-      }
-      
-      const { error } = await updateProfile(userId, {
-        full_name: displayName,
-        avatar_url: newAvatarUrl,
-        updated_at: new Date().toISOString()
-      })
-      
-      if (error) throw error
-      
-      await supabase.auth.updateUser({
-        data: { full_name: displayName }
-      })
-      
-      setAvatarUrl(newAvatarUrl)
-      setAvatarFile(null)
-      toast.success('Profile saved successfully!')
-      
-    } catch (error: any) {
-      console.error('Error saving profile:', error)
-      toast.error(error.message || 'Failed to save profile')
-    } finally {
-      setSaving(false)
-    }
+  if (!userId) {
+    toast.error('User not found')
+    return
   }
+  
+  setSaving(true)
+  
+  try {
+    let newAvatarUrl = avatarUrl
+    
+    if (avatarFile) {
+      setUploading(true)
+      const uploadedUrl = await uploadAvatar(avatarFile)
+      setUploading(false)
+      
+      if (uploadedUrl) {
+        await deleteOldAvatar(avatarUrl)
+        newAvatarUrl = uploadedUrl
+      } else {
+        toast.error('Failed to upload image')
+        setSaving(false)
+        return
+      }
+    }
+    
+    // ✅ التعديل هنا: تحويل null إلى undefined
+    const { error } = await updateProfile(userId, {
+      display_name: displayName,
+      avatar_url: newAvatarUrl ?? undefined,  // هذا هو التغيير المطلوب
+      updated_at: new Date().toISOString()
+    })
+    
+    if (error) throw error
+    
+    await supabase.auth.updateUser({
+      data: { 
+        display_name: displayName,
+        full_name: displayName 
+      }
+    })
+    
+    setAvatarUrl(newAvatarUrl)
+    setAvatarFile(null)
+    toast.success('Profile saved successfully!')
+    
+  } catch (error: any) {
+    console.error('Error saving profile:', error)
+    toast.error(error.message || 'Failed to save profile')
+  } finally {
+    setSaving(false)
+  }
+}
 
   const handleTheme = (t: 'light' | 'dark' | 'system') => {
     setTheme(t)
