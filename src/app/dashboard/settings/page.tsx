@@ -59,7 +59,6 @@ export default function SettingsPage() {
 
   const supabase = createClient()
 
-  // تحميل بيانات المستخدم
   useEffect(() => {
     loadUserData()
   }, [])
@@ -98,7 +97,6 @@ export default function SettingsPage() {
     }
   }
 
-  // رفع الصورة إلى Supabase Storage
   const uploadAvatar = async (file: File): Promise<string | null> => {
     if (!userId) {
       toast.error('User not found')
@@ -277,8 +275,8 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      {/* Input file مخفي لرفع الصورة */}
+    <div className="w-full max-w-6xl mx-auto px-4 py-6 md:px-6">
+      {/* Input file مخفي */}
       <input
         ref={fileInputRef}
         type="file"
@@ -288,38 +286,43 @@ export default function SettingsPage() {
         disabled={uploading}
       />
 
-      <div>
+      {/* عنوان الصفحة */}
+      <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Settings</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Manage your account preferences.</p>
       </div>
 
+      {/* شبكة المحتوى */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        {/* القائمة الجانبية للتبويبات */}
         <nav className="space-y-1">
           {TABS.map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={cn(
-                'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-left transition-colors',
+                'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors',
                 activeTab === tab.id 
                   ? 'bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400' 
-                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900'
+                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
               )}
             >
               <tab.icon size={16} />
-              {tab.label}
+              <span>{tab.label}</span>
             </button>
           ))}
         </nav>
 
+        {/* محتوى التبويب النشط */}
         <div className="lg:col-span-3">
+          {/* تبويب الملف الشخصي */}
           {activeTab === 'profile' && (
             <Card>
-              <CardHeader>
+              <CardHeader className="pb-2">
                 <CardTitle>Profile Information</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-5">
-                {/* قسم الصورة الشخصية - تم تحسينه لرفع الصور */}
+              <CardContent className="space-y-5 pt-2">
+                {/* صورة الملف الشخصي */}
                 <div className="flex items-center gap-4">
                   <div className="relative flex-shrink-0">
                     <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-white text-2xl font-bold overflow-hidden">
@@ -329,8 +332,6 @@ export default function SettingsPage() {
                         displayName[0]?.toUpperCase() || 'U'
                       )}
                     </div>
-                    
-                    {/* زر رفع الصورة */}
                     <label className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-blue-600 hover:bg-blue-700 flex items-center justify-center cursor-pointer shadow-lg transition-colors">
                       {uploading ? (
                         <Loader2 size={14} className="text-white animate-spin" />
@@ -345,8 +346,6 @@ export default function SettingsPage() {
                         disabled={uploading}
                       />
                     </label>
-                    
-                    {/* زر إزالة الصورة المحددة */}
                     {avatarFile && (
                       <button
                         onClick={handleRemoveAvatar}
@@ -356,7 +355,6 @@ export default function SettingsPage() {
                       </button>
                     )}
                   </div>
-
                   <div>
                     <Button 
                       variant="outline" 
@@ -371,26 +369,43 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                <Input 
-                  label="Full Name" 
-                  value={displayName} 
-                  onChange={e => setDisplayName(e.target.value)} 
-                  placeholder="Enter your full name"
-                />
-                
-                <Input 
-                  label="Email" 
-                  value={email} 
-                  disabled 
-                  helperText="Contact support to change your email." 
-                />
-                
+                {/* الاسم الكامل */}
                 <div>
-                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 block">Timezone</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                    Full Name
+                  </label>
+                  <input
+                    type="text"
+                    value={displayName}
+                    onChange={e => setDisplayName(e.target.value)}
+                    className="w-full px-4 py-2.5 text-sm rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                    placeholder="Enter your full name"
+                  />
+                </div>
+
+                {/* البريد الإلكتروني */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    value={email}
+                    disabled
+                    className="w-full px-4 py-2.5 text-sm rounded-xl border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 cursor-not-allowed"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">Contact support to change your email.</p>
+                </div>
+
+                {/* المنطقة الزمنية */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                    Timezone
+                  </label>
                   <select 
                     value={timezone} 
                     onChange={e => setTimezone(e.target.value)} 
-                    className="w-full px-3 py-2.5 text-sm rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2.5 text-sm rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
                   >
                     <option value="America/New_York">Eastern Time (ET)</option>
                     <option value="America/Chicago">Central Time (CT)</option>
@@ -402,8 +417,9 @@ export default function SettingsPage() {
                     <option value="Asia/Dubai">Dubai (GST)</option>
                   </select>
                 </div>
-                
-                <Button onClick={handleSaveProfile} loading={saving || uploading}>
+
+                {/* زر الحفظ */}
+                <Button onClick={handleSaveProfile} loading={saving || uploading} className="w-full md:w-auto">
                   <Save size={14} />
                   {saving || uploading ? 'Saving...' : 'Save Changes'}
                 </Button>
@@ -411,9 +427,12 @@ export default function SettingsPage() {
             </Card>
           )}
 
+          {/* تبويب الإشعارات */}
           {activeTab === 'notifications' && (
             <Card>
-              <CardHeader><CardTitle>Notification Preferences</CardTitle></CardHeader>
+              <CardHeader>
+                <CardTitle>Notification Preferences</CardTitle>
+              </CardHeader>
               <CardContent>
                 <div className="space-y-4">
                   {[
@@ -439,6 +458,7 @@ export default function SettingsPage() {
             </Card>
           )}
 
+          {/* تبويب الأمان */}
           {activeTab === 'security' && (
             <Card>
               <CardHeader><CardTitle>Security Settings</CardTitle></CardHeader>
@@ -504,6 +524,7 @@ export default function SettingsPage() {
             </Card>
           )}
 
+          {/* تبويب المظهر */}
           {activeTab === 'appearance' && (
             <Card>
               <CardHeader><CardTitle>Language &amp; Appearance</CardTitle></CardHeader>
@@ -516,14 +537,14 @@ export default function SettingsPage() {
                         key={lang.code}
                         onClick={() => setLanguage(lang.code)}
                         className={cn(
-                          'flex items-center gap-3 p-3 rounded-xl border-2 text-left transition-all',
+                          'flex items-center gap-3 p-3 rounded-xl border-2 transition-all',
                           language === lang.code 
                             ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30' 
                             : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
                         )}
                       >
                         <span className="text-xl">{lang.flag}</span>
-                        <div>
+                        <div className="text-left">
                           <div className="text-sm font-medium text-gray-900 dark:text-white">{lang.native}</div>
                           <div className="text-xs text-gray-500 dark:text-gray-400">{lang.label}</div>
                         </div>
@@ -556,6 +577,7 @@ export default function SettingsPage() {
             </Card>
           )}
 
+          {/* تبويب البيانات والخصوصية */}
           {activeTab === 'data' && (
             <Card>
               <CardHeader><CardTitle>Data &amp; Privacy</CardTitle></CardHeader>
@@ -585,6 +607,7 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      {/* نوافذ التأكيد */}
       <ConfirmModal
         isOpen={deleteModal}
         onClose={() => setDeleteModal(false)}
