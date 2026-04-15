@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { User, Bell, Lock, Globe, Trash2, Moon, Sun, Monitor, Save, LogOut, Upload, X, Loader2 } from 'lucide-react'
+import { User, Bell, Lock, Globe, Trash2, Moon, Sun, Monitor, Save, LogOut, Upload, X, Loader as Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -41,12 +41,12 @@ export default function SettingsPage() {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [userId, setUserId] = useState<string | null>(null)
   const [timezone, setTimezone] = useState('America/New_York')
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('light')
   const [deleteModal, setDeleteModal] = useState(false)
   const [signOutAllModal, setSignOutAllModal] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [userId, setUserId] = useState<string | null>(null)
   const [notifs, setNotifs] = useState({
     postPublished: true, postFailed: true, botReplies: false, weeklyReport: true, planExpiring: true,
   })
@@ -89,6 +89,7 @@ export default function SettingsPage() {
       const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | 'system' || 'light'
       setTheme(savedTheme)
       if (savedTheme === 'dark') document.documentElement.classList.add('dark')
+
     } catch (error) {
       console.error('Error loading user data:', error)
       toast.error('Failed to load user data')
@@ -113,11 +114,16 @@ export default function SettingsPage() {
 
       if (uploadError) throw uploadError
 
-      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName)
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(fileName)
+
       return publicUrl
-    } catch (error) {
-      console.error('Error uploading avatar:', error)
-      toast.error('Failed to upload image')
+
+    } catch (error: unknown) {
+      const err = error as Error
+      console.error('Error uploading avatar:', err)
+      toast.error(err.message || 'Failed to upload image')
       return null
     }
   }
@@ -161,10 +167,7 @@ export default function SettingsPage() {
   }
 
   const handleSaveProfile = async () => {
-    if (!userId) {
-      toast.error('User not found')
-      return
-    }
+    if (!userId) { toast.error('User not found'); return }
 
     setSaving(true)
 
@@ -189,21 +192,23 @@ export default function SettingsPage() {
       const { error } = await updateProfile(userId, {
         display_name: displayName,
         avatar_url: newAvatarUrl ?? undefined,
-        updated_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       })
 
       if (error) throw error
 
       await supabase.auth.updateUser({
-        data: { display_name: displayName, full_name: displayName },
+        data: { display_name: displayName, full_name: displayName }
       })
 
       setAvatarUrl(newAvatarUrl)
       setAvatarFile(null)
       toast.success('Profile saved successfully!')
-    } catch (error) {
-      console.error('Error saving profile:', error)
-      toast.error('Failed to save profile')
+
+    } catch (error: unknown) {
+      const err = error as Error
+      console.error('Error saving profile:', err)
+      toast.error(err.message || 'Failed to save profile')
     } finally {
       setSaving(false)
     }
@@ -226,28 +231,13 @@ export default function SettingsPage() {
   }
 
   const handleChangePassword = async () => {
-    if (!newPassword || !confirmPassword) {
-      toast.error('Please fill in all password fields')
-      return
-    }
-    if (newPassword.length < 8) {
-      toast.error('New password must be at least 8 characters')
-      return
-    }
-    if (newPassword !== confirmPassword) {
-      toast.error('Passwords do not match')
-      return
-    }
-
+    if (!newPassword || !confirmPassword) { toast.error('Please fill in all password fields'); return }
+    if (newPassword.length < 8) { toast.error('New password must be at least 8 characters'); return }
+    if (newPassword !== confirmPassword) { toast.error('Passwords do not match'); return }
     setPasswordLoading(true)
     const { error } = await updatePassword(newPassword)
     setPasswordLoading(false)
-
-    if (error) {
-      toast.error(error.message)
-      return
-    }
-
+    if (error) { toast.error(error.message); return }
     toast.success('Password updated successfully')
     setCurrentPassword('')
     setNewPassword('')
@@ -258,12 +248,14 @@ export default function SettingsPage() {
     setSignOutAllLoading(true)
     const { error } = await signOutAll()
     setSignOutAllLoading(false)
-
-    if (error) {
-      toast.error(error.message)
-      return
-    }
+    if (error) { toast.error(error.message); return }
     router.push('/login')
+  }
+
+  const handleLogout = async () => {
+    const { error } = await supabase.auth.signOut()
+    if (error) toast.error(error.message)
+    else router.push('/login')
   }
 
   if (loading) {
@@ -275,8 +267,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="w-full max-w-6xl mx-auto px-4 py-6 md:px-6">
-      {/* Input file مخفي */}
+    <div className="p-6 max-w-5xl mx-auto">
       <input
         ref={fileInputRef}
         type="file"
@@ -286,15 +277,12 @@ export default function SettingsPage() {
         disabled={uploading}
       />
 
-      {/* عنوان الصفحة */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Settings</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Manage your account preferences.</p>
       </div>
 
-      {/* شبكة المحتوى */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* القائمة الجانبية للتبويبات */}
         <nav className="space-y-1">
           {TABS.map(tab => (
             <button
@@ -302,8 +290,8 @@ export default function SettingsPage() {
               onClick={() => setActiveTab(tab.id)}
               className={cn(
                 'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors',
-                activeTab === tab.id 
-                  ? 'bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400' 
+                activeTab === tab.id
+                  ? 'bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400'
                   : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
               )}
             >
@@ -313,16 +301,13 @@ export default function SettingsPage() {
           ))}
         </nav>
 
-        {/* محتوى التبويب النشط */}
         <div className="lg:col-span-3">
-          {/* تبويب الملف الشخصي */}
           {activeTab === 'profile' && (
             <Card>
-              <CardHeader className="pb-2">
+              <CardHeader>
                 <CardTitle>Profile Information</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-5 pt-2">
-                {/* صورة الملف الشخصي */}
+              <CardContent className="space-y-5">
                 <div className="flex items-center gap-4">
                   <div className="relative flex-shrink-0">
                     <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-white text-2xl font-bold overflow-hidden">
@@ -355,12 +340,12 @@ export default function SettingsPage() {
                       </button>
                     )}
                   </div>
+
                   <div>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={() => fileInputRef.current?.click()}
-                      disabled={uploading}
                     >
                       Change Photo
                     </Button>
@@ -369,43 +354,26 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                {/* الاسم الكامل */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                    Full Name
-                  </label>
-                  <input
-                    type="text"
-                    value={displayName}
-                    onChange={e => setDisplayName(e.target.value)}
-                    className="w-full px-4 py-2.5 text-sm rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                    placeholder="Enter your full name"
-                  />
-                </div>
+                <Input
+                  label="Full Name"
+                  value={displayName}
+                  onChange={e => setDisplayName(e.target.value)}
+                  placeholder="Enter your full name"
+                />
 
-                {/* البريد الإلكتروني */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    value={email}
-                    disabled
-                    className="w-full px-4 py-2.5 text-sm rounded-xl border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 cursor-not-allowed"
-                  />
-                  <p className="text-xs text-gray-400 mt-1">Contact support to change your email.</p>
-                </div>
+                <Input
+                  label="Email"
+                  value={email}
+                  disabled
+                  helperText="Contact support to change your email."
+                />
 
-                {/* المنطقة الزمنية */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                    Timezone
-                  </label>
-                  <select 
-                    value={timezone} 
-                    onChange={e => setTimezone(e.target.value)} 
-                    className="w-full px-4 py-2.5 text-sm rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 block">Timezone</label>
+                  <select
+                    value={timezone}
+                    onChange={e => setTimezone(e.target.value)}
+                    className="w-full px-3 py-2.5 text-sm rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="America/New_York">Eastern Time (ET)</option>
                     <option value="America/Chicago">Central Time (CT)</option>
@@ -418,8 +386,7 @@ export default function SettingsPage() {
                   </select>
                 </div>
 
-                {/* زر الحفظ */}
-                <Button onClick={handleSaveProfile} loading={saving || uploading} className="w-full md:w-auto">
+                <Button onClick={handleSaveProfile} loading={saving || uploading}>
                   <Save size={14} />
                   {saving || uploading ? 'Saving...' : 'Save Changes'}
                 </Button>
@@ -427,12 +394,9 @@ export default function SettingsPage() {
             </Card>
           )}
 
-          {/* تبويب الإشعارات */}
           {activeTab === 'notifications' && (
             <Card>
-              <CardHeader>
-                <CardTitle>Notification Preferences</CardTitle>
-              </CardHeader>
+              <CardHeader><CardTitle>Notification Preferences</CardTitle></CardHeader>
               <CardContent>
                 <div className="space-y-4">
                   {[
@@ -458,7 +422,6 @@ export default function SettingsPage() {
             </Card>
           )}
 
-          {/* تبويب الأمان */}
           {activeTab === 'security' && (
             <Card>
               <CardHeader><CardTitle>Security Settings</CardTitle></CardHeader>
@@ -504,9 +467,7 @@ export default function SettingsPage() {
                   <div className="flex items-center justify-between p-3.5 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20">
                     <div>
                       <p className="text-sm font-medium text-amber-700 dark:text-amber-400">Sign Out From All Devices</p>
-                      <p className="text-xs text-amber-600/70 dark:text-amber-400/70">
-                        Revoke all active sessions across every device
-                      </p>
+                      <p className="text-xs text-amber-600/70 dark:text-amber-400/70">Revoke all active sessions across every device</p>
                     </div>
                     <Button
                       variant="outline"
@@ -524,7 +485,6 @@ export default function SettingsPage() {
             </Card>
           )}
 
-          {/* تبويب المظهر */}
           {activeTab === 'appearance' && (
             <Card>
               <CardHeader><CardTitle>Language &amp; Appearance</CardTitle></CardHeader>
@@ -538,8 +498,8 @@ export default function SettingsPage() {
                         onClick={() => setLanguage(lang.code)}
                         className={cn(
                           'flex items-center gap-3 p-3 rounded-xl border-2 transition-all',
-                          language === lang.code 
-                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30' 
+                          language === lang.code
+                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30'
                             : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
                         )}
                       >
@@ -557,13 +517,13 @@ export default function SettingsPage() {
                   <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Theme</h4>
                   <div className="grid grid-cols-3 gap-3">
                     {([['light', Sun, 'Light'], ['dark', Moon, 'Dark'], ['system', Monitor, 'System']] as const).map(([t, Icon, label]) => (
-                      <button 
-                        key={t} 
+                      <button
+                        key={t}
                         onClick={() => handleTheme(t)}
                         className={cn(
                           'flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all',
-                          theme === t 
-                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30' 
+                          theme === t
+                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30'
                             : 'border-gray-200 dark:border-gray-700'
                         )}
                       >
@@ -577,7 +537,6 @@ export default function SettingsPage() {
             </Card>
           )}
 
-          {/* تبويب البيانات والخصوصية */}
           {activeTab === 'data' && (
             <Card>
               <CardHeader><CardTitle>Data &amp; Privacy</CardTitle></CardHeader>
@@ -607,7 +566,6 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* نوافذ التأكيد */}
       <ConfirmModal
         isOpen={deleteModal}
         onClose={() => setDeleteModal(false)}
@@ -625,10 +583,7 @@ export default function SettingsPage() {
       <ConfirmModal
         isOpen={signOutAllModal}
         onClose={() => setSignOutAllModal(false)}
-        onConfirm={() => {
-          setSignOutAllModal(false)
-          handleSignOutAll()
-        }}
+        onConfirm={() => { setSignOutAllModal(false); handleSignOutAll() }}
         title="Sign Out From All Devices"
         message="This will immediately end all active sessions on every device. You will need to sign in again on this device."
         confirmLabel="Sign Out All Devices"
