@@ -442,26 +442,7 @@ export default function SettingsPage() {
               </button>
             </div>
 
-            <nav className="p-3 space-y-1">
-              {SIDEBAR_MENU.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    router.push(item.href)
-                    setMobileMenuOpen(false)
-                  }}
-                  className={cn(
-                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
-                    item.active
-                      ? "bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400"
-                      : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
-                  )}
-                >
-                  <item.icon size={18} />
-                  <span>{item.label}</span>
-                </button>
-              ))}
-            </nav>
+            
 
             <div className="p-4 border-t border-gray-200 dark:border-gray-800 mt-auto">
               <div className="flex items-center gap-3">
