@@ -26,9 +26,6 @@ export async function GET(request: NextRequest) {
   // ✅ استخدم v25.0
   const scope = [
     'pages_show_list',
-    'pages_read_engagement',
-    'pages_manage_metadata',
-    'pages_manage_posts',
     'public_profile'
   ].join(',')
 
