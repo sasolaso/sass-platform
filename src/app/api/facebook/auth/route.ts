@@ -12,37 +12,28 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // ✅ الحصول على App ID مباشرة من متغيرات البيئة
   const APP_ID = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID
   const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://glistening-lolly-459fb1.netlify.app'
 
-  // ✅ التحقق من وجود App ID
   if (!APP_ID) {
     console.error('❌ NEXT_PUBLIC_FACEBOOK_APP_ID is not defined')
-    return NextResponse.redirect(
-      new URL('/dashboard/accounts?error=missing_app_id', SITE_URL)
-    )
+    return NextResponse.redirect(new URL('/dashboard/accounts?error=missing_app_id', SITE_URL))
   }
 
-  console.log('✅ App ID found:', APP_ID)
-  console.log('✅ Site URL:', SITE_URL)
-
-  // إنشاء state عشوائي للأمان
   const state = randomBytes(16).toString('hex')
   const redirectUri = `${SITE_URL}/api/facebook/callback`
 
-  // الصلاحيات المطلوبة
+  // ✅ استخدم v25.0
   const scope = [
-    'pages_manage_posts',
+    'pages_show_list',
     'pages_read_engagement',
     'pages_manage_metadata',
+    'pages_manage_posts',
     'pages_messaging',
-    'public_profile',
-    'pages_show_list'
+    'public_profile'
   ].join(',')
 
-  // ✅ بناء رابط OAuth يدوياً (بدون استخدام buildOAuthUrl)
-  const facebookAuthUrl = `https://www.facebook.com/v19.0/dialog/oauth?` +
+  const facebookAuthUrl = `https://www.facebook.com/v25.0/dialog/oauth?` +
     `client_id=${APP_ID}` +
     `&redirect_uri=${encodeURIComponent(redirectUri)}` +
     `&scope=${encodeURIComponent(scope)}` +
@@ -53,7 +44,6 @@ export async function GET(request: NextRequest) {
 
   const response = NextResponse.redirect(facebookAuthUrl)
 
-  // حفظ state في cookie للتحقق لاحقاً
   response.cookies.set('fb_oauth_state', state, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
