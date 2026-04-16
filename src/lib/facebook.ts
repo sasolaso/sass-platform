@@ -1,7 +1,6 @@
 // src/lib/facebook.ts
 
-const GRAPH_API = 'https://graph.facebook.com/v19.0'
-
+const GRAPH_API = 'https://graph.facebook.com/v25.0'
 export async function exchangeCodeForAccessToken(code: string, redirectUri: string): Promise<string> {
   // ✅ اصلاح: استخدام NEXT_PUBLIC_FACEBOOK_APP_ID
   const params = new URLSearchParams({
