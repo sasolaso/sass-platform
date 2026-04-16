@@ -134,27 +134,27 @@ export async function sendReply(
 }
 
 export function buildOAuthUrl(redirectUri: string, state: string): string {
-  // ✅ اصلاح: استخدام NEXT_PUBLIC_FACEBOOK_APP_ID
   const appId = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID
   
   if (!appId) {
     throw new Error('NEXT_PUBLIC_FACEBOOK_APP_ID is not defined')
   }
 
+  // ✅ استخدم v25.0 بدلاً من v19.0
   const params = new URLSearchParams({
     client_id: appId,
     redirect_uri: redirectUri,
     scope: [
-      'pages_manage_posts',
-      'pages_read_engagement',
-      'pages_manage_metadata',
-      'pages_messaging',
-      'public_profile',
       'pages_show_list',
+      'pages_read_engagement', 
+      'pages_manage_metadata',
+      'pages_manage_posts',
+      'pages_messaging',
+      'public_profile'
     ].join(','),
     response_type: 'code',
-    state,
+    state: state,
   })
 
-  return `https://www.facebook.com/v19.0/dialog/oauth?${params}`
+  return `https://www.facebook.com/v25.0/dialog/oauth?${params}`
 }
