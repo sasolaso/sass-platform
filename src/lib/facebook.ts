@@ -146,8 +146,6 @@ export function buildOAuthUrl(redirectUri: string, state: string): string {
     redirect_uri: redirectUri,
     scope: [
       'pages_show_list',
-      'pages_read_engagement', 
-      'pages_manage_posts',
       'public_profile'
     ].join(','),
     response_type: 'code',
