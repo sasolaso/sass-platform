@@ -149,7 +149,6 @@ export function buildOAuthUrl(redirectUri: string, state: string): string {
       'pages_read_engagement', 
       'pages_manage_metadata',
       'pages_manage_posts',
-      'pages_messaging',
       'public_profile'
     ].join(','),
     response_type: 'code',
