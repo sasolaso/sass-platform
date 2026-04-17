@@ -8,46 +8,7 @@ import { Button } from '@/components/ui/button'
 import { cn, getCharLimit } from '@/lib/utils'
 import { getPlatformIcon } from '@/components/ui/platform-icons'
 import { createClient } from '@/lib/supabase/client'
-import { uploadMedia } from '@/lib/supabase/storage'
 
-// أضف هذه الدالة
-const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-  const file = e.target.files?.[0]
-  if (!file) return
-
-  const isVideo = file.type.startsWith('video/')
-  const isImage = file.type.startsWith('image/')
-
-  if (!isVideo && !isImage) {
-    toast.error('Please select an image or video file')
-    return
-  }
-
-  if (file.size > 50 * 1024 * 1024) {
-    toast.error('File size must be under 50MB')
-    return
-  }
-
-  // عرض المعاينة فوراً
-  const objectUrl = URL.createObjectURL(file)
-  setMediaPreview(objectUrl)
-  setMediaType(isVideo ? 'video' : 'image')
-  
-  // ✅ رفع الملف إلى Supabase فوراً
-  try {
-    const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('User not found')
-    
-    const publicUrl = await uploadMedia(user.id, file, isVideo ? 'video' : 'image')
-    setMediaUrl(publicUrl) // ✅ الآن الرابط صالح لـ Facebook
-    console.log('File uploaded to:', publicUrl)
-  } catch (error) {
-    console.error('Upload error:', error)
-    toast.error('Failed to upload media. Please try again.')
-    removeMedia()
-  }
-}
 
 type MediaType = 'none' | 'image' | 'video'
 
