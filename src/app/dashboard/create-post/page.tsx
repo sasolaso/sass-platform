@@ -1,14 +1,16 @@
+// src/app/dashboard/create-post/page.tsx
+
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react'
-import { Send, Save, Clock, Hash, X, Sparkles, Image as ImageIcon, Video, CircleAlert as AlertCircle } from 'lucide-react'
+import { Send, Save, Clock, Hash, X, Sparkles, Image as ImageIcon, Video, CircleAlert as AlertCircle, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { cn, getCharLimit } from '@/lib/utils'
 import { getPlatformIcon } from '@/components/ui/platform-icons'
 import { createClient } from '@/lib/supabase/client'
-
+import { uploadMedia } from '@/lib/supabase/storage'
 
 type MediaType = 'none' | 'image' | 'video'
 
@@ -29,6 +31,7 @@ export default function CreatePostPage() {
   const [mediaUrl, setMediaUrl] = useState('')
   const [mediaType, setMediaType] = useState<MediaType>('none')
   const [mediaPreview, setMediaPreview] = useState<string | null>(null)
+  const [mediaUploading, setMediaUploading] = useState(false)
   const [loading, setLoading] = useState(false)
   const [aiLoading, setAiLoading] = useState(false)
   const [accountsLoading, setAccountsLoading] = useState(true)
@@ -72,7 +75,8 @@ export default function CreatePostPage() {
 
   const removeHashtag = (tag: string) => setHashtags(hashtags.filter(h => h !== tag))
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // ✅ دالة معالجة رفع الملف (معدلة)
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
 
@@ -89,10 +93,29 @@ export default function CreatePostPage() {
       return
     }
 
+    // عرض المعاينة فوراً
     const objectUrl = URL.createObjectURL(file)
     setMediaPreview(objectUrl)
     setMediaType(isVideo ? 'video' : 'image')
-    setMediaUrl(objectUrl)
+    
+    // ✅ رفع الملف إلى Supabase
+    setMediaUploading(true)
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('User not found')
+      
+      const publicUrl = await uploadMedia(user.id, file, isVideo ? 'video' : 'image')
+      setMediaUrl(publicUrl)
+      console.log('✅ File uploaded to:', publicUrl)
+      toast.success('Media uploaded successfully!')
+    } catch (error) {
+      console.error('Upload error:', error)
+      toast.error('Failed to upload media. Please try again.')
+      removeMedia()
+    } finally {
+      setMediaUploading(false)
+    }
   }
 
   const removeMedia = () => {
@@ -317,9 +340,10 @@ export default function CreatePostPage() {
                 )}
                 <button
                   onClick={removeMedia}
+                  disabled={mediaUploading}
                   className="absolute top-2 right-2 p-1.5 bg-gray-900/70 text-white rounded-lg hover:bg-gray-900 transition-colors"
                 >
-                  <X size={14} />
+                  {mediaUploading ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />}
                 </button>
                 <div className="absolute bottom-2 left-2">
                   <span className="text-xs bg-gray-900/70 text-white px-2 py-1 rounded-md capitalize">{mediaType}</span>
@@ -327,15 +351,27 @@ export default function CreatePostPage() {
               </div>
             ) : (
               <div
-                onClick={() => fileInputRef.current?.click()}
-                className="border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl p-8 text-center cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50/50 dark:hover:bg-blue-950/10 transition-all group"
+                onClick={() => !mediaUploading && fileInputRef.current?.click()}
+                className={cn(
+                  'border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl p-8 text-center transition-all group',
+                  !mediaUploading && 'cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50/50 dark:hover:bg-blue-950/10'
+                )}
               >
-                <div className="flex items-center justify-center gap-3 text-gray-400 group-hover:text-blue-500 mb-2">
-                  <ImageIcon size={20} />
-                  <Video size={20} />
-                </div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Click to upload an image or video</p>
-                <p className="text-xs text-gray-400 mt-1">Max 50MB</p>
+                {mediaUploading ? (
+                  <div className="flex flex-col items-center gap-2">
+                    <Loader2 size={24} className="animate-spin text-blue-500" />
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Uploading media...</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-center gap-3 text-gray-400 group-hover:text-blue-500 mb-2">
+                      <ImageIcon size={20} />
+                      <Video size={20} />
+                    </div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Click to upload an image or video</p>
+                    <p className="text-xs text-gray-400 mt-1">Max 50MB</p>
+                  </>
+                )}
               </div>
             )}
             <input
@@ -344,6 +380,7 @@ export default function CreatePostPage() {
               accept="image/*,video/*"
               onChange={handleFileChange}
               className="hidden"
+              disabled={mediaUploading}
             />
           </Card>
         </div>
@@ -399,7 +436,7 @@ export default function CreatePostPage() {
               className="w-full gap-2"
               onClick={handlePublishNow}
               loading={loading}
-              disabled={isOverLimit || accounts.length === 0}
+              disabled={isOverLimit || accounts.length === 0 || mediaUploading}
             >
               <Send size={14} />
               Publish Now
@@ -408,7 +445,7 @@ export default function CreatePostPage() {
               variant="outline"
               className="w-full gap-2"
               onClick={handleSchedule}
-              disabled={loading || isOverLimit || accounts.length === 0}
+              disabled={loading || isOverLimit || accounts.length === 0 || mediaUploading}
             >
               <Clock size={14} />
               Schedule Post
