@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
   // ✅ استخدم v25.0
   const scope = [
     'pages_show_list',
-    'public_profile'
+    'public_profile',
     'pages_manage_posts'
   ].join(',')
 
