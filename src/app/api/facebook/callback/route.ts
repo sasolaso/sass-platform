@@ -92,27 +92,25 @@ export async function GET(request: NextRequest) {
       const { error: upsertError } = await supabase
         .from('connected_accounts')
         .upsert(
-          {
-            user_id: user.id,
-            platform: 'facebook',
-            account_id: page.id,
-            page_id: page.id,
-            account_name: page.name,
-            account_username: page.username || page.name,  // ✅ استخدام username إذا وجد، وإلا استخدم name
-            avatar_url: page.picture?.data?.url || '',
-            access_token: page.access_token,
-            token_expires_at: tokenExpiresAt,
-            is_active: true,
-            followers_count: page.fan_count || 0,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'user_id,account_id' }
-        )
-
-      if (upsertError) {
-        console.error(`❌ Error saving page ${page.id}:`, upsertError)
-        failedCount++
-      } else {
+         const { error: upsertError } = await supabase
+  .from('connected_accounts')
+  .upsert(
+    {
+      user_id: user.id,
+      platform: 'facebook',
+      account_id: page.id,
+      page_id: page.id,
+      account_name: page.name,
+      account_username: page.name,        // ✅ استخدام name فقط
+      avatar_url: page.picture?.data?.url || '',
+      access_token: page.access_token,
+      token_expires_at: tokenExpiresAt,
+      is_active: true,
+      followers_count: page.fan_count || 0,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'user_id,account_id' }
+  ) else {
         console.log(`✅ Successfully saved/updated page: ${page.name}`)
         savedCount++
       }
