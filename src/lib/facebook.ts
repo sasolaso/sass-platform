@@ -1,10 +1,8 @@
-// src/lib/facebook.ts
+const GRAPH_API = 'https://graph.facebook.com/v19.0'
 
-const GRAPH_API = 'https://graph.facebook.com/v25.0'
 export async function exchangeCodeForAccessToken(code: string, redirectUri: string): Promise<string> {
-  // ✅ اصلاح: استخدام NEXT_PUBLIC_FACEBOOK_APP_ID
   const params = new URLSearchParams({
-    client_id: process.env.NEXT_PUBLIC_FACEBOOK_APP_ID!,
+    client_id: process.env.FACEBOOK_APP_ID!,
     client_secret: process.env.FACEBOOK_APP_SECRET!,
     redirect_uri: redirectUri,
     code,
@@ -21,10 +19,9 @@ export async function exchangeCodeForAccessToken(code: string, redirectUri: stri
 }
 
 export async function getLongLivedToken(shortLivedToken: string): Promise<string> {
-  // ✅ اصلاح: استخدام NEXT_PUBLIC_FACEBOOK_APP_ID
   const params = new URLSearchParams({
     grant_type: 'fb_exchange_token',
-    client_id: process.env.NEXT_PUBLIC_FACEBOOK_APP_ID!,
+    client_id: process.env.FACEBOOK_APP_ID!,
     client_secret: process.env.FACEBOOK_APP_SECRET!,
     fb_exchange_token: shortLivedToken,
   })
@@ -134,24 +131,20 @@ export async function sendReply(
 }
 
 export function buildOAuthUrl(redirectUri: string, state: string): string {
-  const appId = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID
-  
-  if (!appId) {
-    throw new Error('NEXT_PUBLIC_FACEBOOK_APP_ID is not defined')
-  }
-
-  // ✅ استخدم v25.0 بدلاً من v19.0
   const params = new URLSearchParams({
-    client_id: appId,
+    client_id: process.env.FACEBOOK_APP_ID!,
     redirect_uri: redirectUri,
     scope: [
-      'pages_show_list',
+      'pages_manage_posts',
+      'pages_read_engagement',
+      'pages_manage_metadata',
+      'pages_messaging',
       'public_profile',
-      'pages_manage_posts'
+      'pages_show_list',
     ].join(','),
     response_type: 'code',
-    state: state,
+    state,
   })
 
-  return `https://www.facebook.com/v25.0/dialog/oauth?${params}`
+  return `https://www.facebook.com/v19.0/dialog/oauth?${params}`
 }
