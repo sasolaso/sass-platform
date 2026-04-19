@@ -10,7 +10,7 @@ export interface FacebookPage {
 
 export async function exchangeCodeForAccessToken(code: string): Promise<string> {
   const params = new URLSearchParams({
-    client_id: process.env.FACEBOOK_APP_ID!,
+    client_id: process.env.NEXT_PUBLIC_FACEBOOK_APP_ID!,
     client_secret: process.env.FACEBOOK_APP_SECRET!,
     redirect_uri: `${process.env.NEXT_PUBLIC_SITE_URL}/api/facebook/callback`,
     code,
