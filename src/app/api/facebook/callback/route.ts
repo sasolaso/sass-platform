@@ -1,3 +1,5 @@
+// src/app/api/facebook/callback/route.ts
+
 import { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { exchangeCodeForAccessToken, getLongLivedUserToken, getUserPages } from '@/lib/facebook'
@@ -11,48 +13,52 @@ export async function GET(request: NextRequest) {
   const errorReason = searchParams.get('error_reason')
   const errorDescription = searchParams.get('error_description')
 
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://glistening-lolly-459fb1.netlify.app'
+
   if (error) {
     const msg = errorDescription || errorReason || error
     return Response.redirect(
-      new URL(`/dashboard/connected-accounts?error=${encodeURIComponent(msg)}`, request.url)
+      new URL(`/dashboard/connected-accounts?error=${encodeURIComponent(msg)}`, siteUrl)
     )
   }
 
-  const cookieStore = cookies()  // ❌ لا حاجة لـ await
+  const cookieStore = cookies()
   const savedState = cookieStore.get('fb_oauth_state')?.value
   cookieStore.delete('fb_oauth_state')
 
   if (!state || state !== savedState) {
     return Response.redirect(
-      new URL('/dashboard/connected-accounts?error=Security+check+failed.+Please+try+again.', request.url)
+      new URL('/dashboard/connected-accounts?error=Security+check+failed.+Please+try+again.', siteUrl)
     )
   }
 
   if (!code) {
     return Response.redirect(
-      new URL('/dashboard/connected-accounts?error=No+authorization+code+received.', request.url)
+      new URL('/dashboard/connected-accounts?error=No+authorization+code+received.', siteUrl)
     )
   }
 
-  const supabase = await createClient()  // ✅ استخدم createClient
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    return Response.redirect(new URL('/login', request.url))
+  const supabase = await createClient()
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
+  
+  if (userError || !user) {
+    console.error('User not authenticated:', userError)
+    return Response.redirect(new URL('/login', siteUrl))
   }
 
   try {
-    // Step 1: Exchange short-lived code for short-lived user token
+    // Step 1: Exchange code for short-lived token
     let shortToken: string
     try {
       shortToken = await exchangeCodeForAccessToken(code)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to exchange authorization code'
       return Response.redirect(
-        new URL(`/dashboard/connected-accounts?error=${encodeURIComponent(msg)}`, request.url)
+        new URL(`/dashboard/connected-accounts?error=${encodeURIComponent(msg)}`, siteUrl)
       )
     }
 
-    // Step 2: Upgrade to long-lived user token (~60 days)
+    // Step 2: Upgrade to long-lived user token
     let longToken: string
     let expiresIn: number
     try {
@@ -62,39 +68,33 @@ export async function GET(request: NextRequest) {
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to obtain long-lived token'
       return Response.redirect(
-        new URL(`/dashboard/connected-accounts?error=${encodeURIComponent(msg)}`, request.url)
+        new URL(`/dashboard/connected-accounts?error=${encodeURIComponent(msg)}`, siteUrl)
       )
     }
 
-    // Step 3: Fetch connected Facebook pages
+    // Step 3: Fetch Facebook pages
     let pages: Awaited<ReturnType<typeof getUserPages>>
     try {
       pages = await getUserPages(longToken)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to fetch Facebook pages'
       return Response.redirect(
-        new URL(`/dashboard/connected-accounts?error=${encodeURIComponent(msg)}`, request.url)
+        new URL(`/dashboard/connected-accounts?error=${encodeURIComponent(msg)}`, siteUrl)
       )
     }
 
     if (pages.length === 0) {
       return Response.redirect(
-        new URL(
-          '/dashboard/connected-accounts?error=No+Facebook+Pages+found.+Make+sure+you+are+an+admin+of+at+least+one+Facebook+Page.',
-          request.url
-        )
+        new URL('/dashboard/connected-accounts?error=No+Facebook+Pages+found', siteUrl)
       )
     }
 
-    // ✅ استخدم نفس عميل supabase (لديه صلاحيات service role)
-    // تأكد من أن متغير SUPABASE_SERVICE_ROLE_KEY موجود في البيئة
     const tokenExpiresAt = new Date(Date.now() + expiresIn * 1000).toISOString()
-
-    const saveErrors: string[] = []
+    let savedCount = 0
 
     for (const page of pages) {
       const avatarUrl = page.picture?.data?.url || ''
-
+      
       const { error: upsertError } = await supabase
         .from('connected_accounts')
         .upsert(
@@ -115,36 +115,28 @@ export async function GET(request: NextRequest) {
           { onConflict: 'user_id,platform,account_id' }
         )
 
-      if (upsertError) {
-        console.error('Upsert error:', upsertError)
-        saveErrors.push(`Page "${page.name}": ${upsertError.message}`)
+      if (!upsertError) {
+        savedCount++
+      } else {
+        console.error('Error saving page:', page.name, upsertError.message)
       }
     }
 
-    if (saveErrors.length > 0 && saveErrors.length === pages.length) {
-      const msg = `Failed to save account data: ${saveErrors[0]}`
+    if (savedCount === 0) {
       return Response.redirect(
-        new URL(`/dashboard/connected-accounts?error=${encodeURIComponent(msg)}`, request.url)
-      )
-    }
-
-    const successCount = pages.length - saveErrors.length
-    if (saveErrors.length > 0) {
-      return Response.redirect(
-        new URL(
-          `/dashboard/connected-accounts?success=facebook&warning=${encodeURIComponent(`${successCount} page(s) connected. ${saveErrors.length} failed to save.`)}`,
-          request.url
-        )
+        new URL('/dashboard/connected-accounts?error=Failed+to+save+account+data', siteUrl)
       )
     }
 
     return Response.redirect(
-      new URL('/dashboard/connected-accounts?success=facebook', request.url)
+      new URL(`/dashboard/connected-accounts?success=facebook&count=${savedCount}`, siteUrl)
     )
+    
   } catch (err) {
     const message = err instanceof Error ? err.message : 'An unexpected error occurred'
+    console.error('Facebook callback error:', message)
     return Response.redirect(
-      new URL(`/dashboard/connected-accounts?error=${encodeURIComponent(message)}`, request.url)
+      new URL(`/dashboard/connected-accounts?error=${encodeURIComponent(message)}`, siteUrl)
     )
   }
 }
