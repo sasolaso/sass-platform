@@ -14,7 +14,7 @@ export async function exchangeCodeForAccessToken(code: string): Promise<string> 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://glistening-lolly-459fb1.netlify.app'
   
   const params = new URLSearchParams({
-    client_id: process.env.NEXT_PUBLIC_FACEBOOK_APP_ID!,
+    client_id: process.env.NEXT_PUBLIC_FACEBOOK_APP_ID!,  // ✅ تغيير هنا
     client_secret: process.env.FACEBOOK_APP_SECRET!,
     redirect_uri: `${siteUrl}/api/facebook/callback`,
     code,
@@ -29,7 +29,7 @@ export async function exchangeCodeForAccessToken(code: string): Promise<string> 
 export async function getLongLivedUserToken(shortLivedToken: string): Promise<{ access_token: string; expires_in: number }> {
   const params = new URLSearchParams({
     grant_type: 'fb_exchange_token',
-    client_id: process.env.NEXT_PUBLIC_FACEBOOK_APP_ID!,
+    client_id: process.env.NEXT_PUBLIC_FACEBOOK_APP_ID!,  // ✅ تغيير هنا
     client_secret: process.env.FACEBOOK_APP_SECRET!,
     fb_exchange_token: shortLivedToken,
   })
