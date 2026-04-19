@@ -235,11 +235,12 @@ function ConnectedAccountsContent() {
                       </span>
                     </div>
                     <div className="flex items-center gap-3 mt-1 text-xs text-slate-400">
-                      {account.followers_count > 0 && (
-                        <span className="flex items-center gap-1">
-                          <Users className="w-3 h-3" />
-                          {account.followers_count.toLocaleString()} followers
-                        </span>
+                      <span className="flex items-center gap-1">
+                        <Users className="w-3 h-3" />
+                        {account.followers_count.toLocaleString()} followers
+                      </span>
+                      {account.posts_count > 0 && (
+                        <span>{account.posts_count.toLocaleString()} posts</span>
                       )}
                       {account.token_expires_at && (
                         <span className={expired ? 'text-red-500' : expiringSoon ? 'text-amber-500' : ''}>
