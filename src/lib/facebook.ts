@@ -1,41 +1,5 @@
 const GRAPH_API = 'https://graph.facebook.com/v19.0'
 
-export async function exchangeCodeForAccessToken(code: string, redirectUri: string): Promise<string> {
-  const params = new URLSearchParams({
-    client_id: process.env.FACEBOOK_APP_ID!,
-    client_secret: process.env.FACEBOOK_APP_SECRET!,
-    redirect_uri: redirectUri,
-    code,
-  })
-
-  const res = await fetch(`${GRAPH_API}/oauth/access_token?${params}`)
-  const json = await res.json()
-
-  if (!res.ok || json.error) {
-    throw new Error(json.error?.message || 'Failed to exchange code for access token')
-  }
-
-  return json.access_token as string
-}
-
-export async function getLongLivedToken(shortLivedToken: string): Promise<string> {
-  const params = new URLSearchParams({
-    grant_type: 'fb_exchange_token',
-    client_id: process.env.FACEBOOK_APP_ID!,
-    client_secret: process.env.FACEBOOK_APP_SECRET!,
-    fb_exchange_token: shortLivedToken,
-  })
-
-  const res = await fetch(`${GRAPH_API}/oauth/access_token?${params}`)
-  const json = await res.json()
-
-  if (!res.ok || json.error) {
-    throw new Error(json.error?.message || 'Failed to get long-lived token')
-  }
-
-  return json.access_token as string
-}
-
 export interface FacebookPage {
   id: string
   name: string
@@ -44,71 +8,127 @@ export interface FacebookPage {
   fan_count?: number
 }
 
+export async function exchangeCodeForAccessToken(code: string): Promise<string> {
+  const params = new URLSearchParams({
+    client_id: process.env.FACEBOOK_APP_ID!,
+    client_secret: process.env.FACEBOOK_APP_SECRET!,
+    redirect_uri: `${process.env.NEXT_PUBLIC_SITE_URL}/api/facebook/callback`,
+    code,
+  })
+  const res = await fetch(`${GRAPH_API}/oauth/access_token?${params}`)
+  const data = await res.json()
+  if (data.error) throw new Error(data.error.message)
+  return data.access_token
+}
+
+export async function getLongLivedUserToken(shortLivedToken: string): Promise<{ access_token: string; expires_in: number }> {
+  const params = new URLSearchParams({
+    grant_type: 'fb_exchange_token',
+    client_id: process.env.FACEBOOK_APP_ID!,
+    client_secret: process.env.FACEBOOK_APP_SECRET!,
+    fb_exchange_token: shortLivedToken,
+  })
+  const res = await fetch(`${GRAPH_API}/oauth/access_token?${params}`)
+  const data = await res.json()
+  if (data.error) throw new Error(data.error.message)
+  // expires_in from Facebook is in seconds. Long-lived tokens last ~60 days (~5,184,000 s).
+  // If the value is missing or suspiciously small (e.g. 2 hours = 7200), use 60 days.
+  const SIXTY_DAYS_SECONDS = 60 * 24 * 60 * 60
+  const expiresIn = typeof data.expires_in === 'number' && data.expires_in > 7200
+    ? data.expires_in
+    : SIXTY_DAYS_SECONDS
+  return { access_token: data.access_token, expires_in: expiresIn }
+}
+
 export async function getUserPages(userAccessToken: string): Promise<FacebookPage[]> {
-  const res = await fetch(
-    `${GRAPH_API}/me/accounts?fields=id,name,access_token,picture,fan_count&access_token=${userAccessToken}`
-  )
-  const json = await res.json()
-
-  if (!res.ok || json.error) {
-    throw new Error(json.error?.message || 'Failed to fetch pages')
-  }
-
-  return (json.data || []) as FacebookPage[]
+  const params = new URLSearchParams({
+    fields: 'id,name,access_token,picture,fan_count',
+    access_token: userAccessToken,
+  })
+  const res = await fetch(`${GRAPH_API}/me/accounts?${params}`)
+  const data = await res.json()
+  if (data.error) throw new Error(data.error.message)
+  return data.data || []
 }
 
-export async function getPageAccessToken(pageId: string, userAccessToken: string): Promise<string> {
-  const res = await fetch(
-    `${GRAPH_API}/${pageId}?fields=access_token&access_token=${userAccessToken}`
-  )
-  const json = await res.json()
-
-  if (!res.ok || json.error) {
-    throw new Error(json.error?.message || 'Failed to get page access token')
-  }
-
-  return json.access_token as string
-}
-
-export type MediaType = 'none' | 'image' | 'video'
-
-export async function publishPost(
+export async function publishFacebookPost(
   pageId: string,
   content: string,
-  mediaUrl: string,
-  mediaType: MediaType,
-  pageAccessToken: string
-): Promise<string> {
-  let endpoint: string
+  mediaUrl: string | null,
+  mediaType: 'none' | 'image' | 'video',
+  accessToken: string,
+  additionalImageUrls?: string[]
+): Promise<{ id: string }> {
+  // Multi-image carousel: upload each image as unpublished, then post them together
+  const allImages = [
+    ...(mediaUrl && mediaType === 'image' ? [mediaUrl] : []),
+    ...(additionalImageUrls || []),
+  ]
+
+  if (allImages.length > 1) {
+    return publishFacebookCarousel(pageId, content, allImages, accessToken)
+  }
+
+  let url: string
   let body: Record<string, string>
 
   if (mediaType === 'image' && mediaUrl) {
-    endpoint = `${GRAPH_API}/${pageId}/photos`
-    body = { url: mediaUrl, caption: content, access_token: pageAccessToken }
+    url = `${GRAPH_API}/${pageId}/photos`
+    body = { url: mediaUrl, caption: content, access_token: accessToken }
   } else if (mediaType === 'video' && mediaUrl) {
-    endpoint = `${GRAPH_API}/${pageId}/videos`
-    body = { file_url: mediaUrl, description: content, access_token: pageAccessToken }
+    url = `${GRAPH_API}/${pageId}/videos`
+    body = { file_url: mediaUrl, description: content, access_token: accessToken }
   } else {
-    endpoint = `${GRAPH_API}/${pageId}/feed`
-    body = { message: content, access_token: pageAccessToken }
+    url = `${GRAPH_API}/${pageId}/feed`
+    body = { message: content, access_token: accessToken }
   }
 
-  const res = await fetch(endpoint, {
+  const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
-
-  const json = await res.json()
-
-  if (!res.ok || json.error) {
-    throw new Error(json.error?.message || 'Failed to publish post')
-  }
-
-  return (json.id || json.post_id || '') as string
+  const data = await res.json()
+  if (data.error) throw new Error(data.error.message)
+  return data
 }
 
-export async function sendReply(
+// Upload each image as an unpublished photo attachment, then publish all together as a multi-photo post
+export async function publishFacebookCarousel(
+  pageId: string,
+  content: string,
+  imageUrls: string[],
+  accessToken: string
+): Promise<{ id: string }> {
+  const photoIds: string[] = []
+
+  for (const imgUrl of imageUrls) {
+    const res = await fetch(`${GRAPH_API}/${pageId}/photos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: imgUrl, published: false, access_token: accessToken }),
+    })
+    const data = await res.json()
+    if (data.error) throw new Error(`Photo upload failed: ${data.error.message}`)
+    photoIds.push(data.id)
+  }
+
+  const attachedMedia = photoIds.map(id => ({ media_fbid: id }))
+  const feedRes = await fetch(`${GRAPH_API}/${pageId}/feed`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      message: content,
+      attached_media: attachedMedia,
+      access_token: accessToken,
+    }),
+  })
+  const feedData = await feedRes.json()
+  if (feedData.error) throw new Error(feedData.error.message)
+  return feedData
+}
+
+export async function sendFacebookReply(
   pageAccessToken: string,
   recipientId: string,
   messageText: string
@@ -122,29 +142,6 @@ export async function sendReply(
       access_token: pageAccessToken,
     }),
   })
-
-  const json = await res.json()
-
-  if (!res.ok || json.error) {
-    throw new Error(json.error?.message || 'Failed to send reply')
-  }
-}
-
-export function buildOAuthUrl(redirectUri: string, state: string): string {
-  const params = new URLSearchParams({
-    client_id: process.env.FACEBOOK_APP_ID!,
-    redirect_uri: redirectUri,
-    scope: [
-      'pages_manage_posts',
-      'pages_read_engagement',
-      'pages_manage_metadata',
-      'pages_messaging',
-      'public_profile',
-      'pages_show_list',
-    ].join(','),
-    response_type: 'code',
-    state,
-  })
-
-  return `https://www.facebook.com/v19.0/dialog/oauth?${params}`
+  const data = await res.json()
+  if (data.error) throw new Error(data.error.message)
 }
