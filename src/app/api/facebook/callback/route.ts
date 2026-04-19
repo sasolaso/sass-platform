@@ -1,6 +1,5 @@
 import { NextRequest } from 'next/server'
-import { createSupabaseServerClient } from '@/lib/supabase-server'
-import { createServiceClient } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/server'
 import { exchangeCodeForAccessToken, getLongLivedUserToken, getUserPages } from '@/lib/facebook'
 import { cookies } from 'next/headers'
 
@@ -15,27 +14,27 @@ export async function GET(request: NextRequest) {
   if (error) {
     const msg = errorDescription || errorReason || error
     return Response.redirect(
-      new URL(`/connected-accounts?error=${encodeURIComponent(msg)}`, request.url)
+      new URL(`/dashboard/connected-accounts?error=${encodeURIComponent(msg)}`, request.url)
     )
   }
 
-  const cookieStore = await cookies()
+  const cookieStore = cookies()  // ❌ لا حاجة لـ await
   const savedState = cookieStore.get('fb_oauth_state')?.value
   cookieStore.delete('fb_oauth_state')
 
   if (!state || state !== savedState) {
     return Response.redirect(
-      new URL('/connected-accounts?error=Security+check+failed.+Please+try+again.', request.url)
+      new URL('/dashboard/connected-accounts?error=Security+check+failed.+Please+try+again.', request.url)
     )
   }
 
   if (!code) {
     return Response.redirect(
-      new URL('/connected-accounts?error=No+authorization+code+received.', request.url)
+      new URL('/dashboard/connected-accounts?error=No+authorization+code+received.', request.url)
     )
   }
 
-  const supabase = await createSupabaseServerClient()
+  const supabase = await createClient()  // ✅ استخدم createClient
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
     return Response.redirect(new URL('/login', request.url))
@@ -49,7 +48,7 @@ export async function GET(request: NextRequest) {
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to exchange authorization code'
       return Response.redirect(
-        new URL(`/connected-accounts?error=${encodeURIComponent(msg)}`, request.url)
+        new URL(`/dashboard/connected-accounts?error=${encodeURIComponent(msg)}`, request.url)
       )
     }
 
@@ -63,7 +62,7 @@ export async function GET(request: NextRequest) {
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to obtain long-lived token'
       return Response.redirect(
-        new URL(`/connected-accounts?error=${encodeURIComponent(msg)}`, request.url)
+        new URL(`/dashboard/connected-accounts?error=${encodeURIComponent(msg)}`, request.url)
       )
     }
 
@@ -74,29 +73,29 @@ export async function GET(request: NextRequest) {
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to fetch Facebook pages'
       return Response.redirect(
-        new URL(`/connected-accounts?error=${encodeURIComponent(msg)}`, request.url)
+        new URL(`/dashboard/connected-accounts?error=${encodeURIComponent(msg)}`, request.url)
       )
     }
 
     if (pages.length === 0) {
       return Response.redirect(
         new URL(
-          '/connected-accounts?error=No+Facebook+Pages+found.+Make+sure+you+are+an+admin+of+at+least+one+Facebook+Page.',
+          '/dashboard/connected-accounts?error=No+Facebook+Pages+found.+Make+sure+you+are+an+admin+of+at+least+one+Facebook+Page.',
           request.url
         )
       )
     }
 
-    const serviceClient = createServiceClient()
-    // Token expiry: use what the API returned (already validated to be 60 days worth)
-    const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString()
+    // ✅ استخدم نفس عميل supabase (لديه صلاحيات service role)
+    // تأكد من أن متغير SUPABASE_SERVICE_ROLE_KEY موجود في البيئة
+    const tokenExpiresAt = new Date(Date.now() + expiresIn * 1000).toISOString()
 
     const saveErrors: string[] = []
 
     for (const page of pages) {
       const avatarUrl = page.picture?.data?.url || ''
 
-      const { error: upsertError } = await serviceClient
+      const { error: upsertError } = await supabase
         .from('connected_accounts')
         .upsert(
           {
@@ -107,9 +106,8 @@ export async function GET(request: NextRequest) {
             account_name: page.name,
             account_username: page.name,
             avatar_url: avatarUrl,
-            // Page tokens from /me/accounts are permanent (never expire) when the user token is long-lived
             access_token: page.access_token,
-            token_expires_at: expiresAt,
+            token_expires_at: tokenExpiresAt,
             followers_count: page.fan_count || 0,
             is_active: true,
             updated_at: new Date().toISOString(),
@@ -118,36 +116,35 @@ export async function GET(request: NextRequest) {
         )
 
       if (upsertError) {
+        console.error('Upsert error:', upsertError)
         saveErrors.push(`Page "${page.name}": ${upsertError.message}`)
       }
     }
 
     if (saveErrors.length > 0 && saveErrors.length === pages.length) {
-      // All pages failed to save
       const msg = `Failed to save account data: ${saveErrors[0]}`
       return Response.redirect(
-        new URL(`/connected-accounts?error=${encodeURIComponent(msg)}`, request.url)
+        new URL(`/dashboard/connected-accounts?error=${encodeURIComponent(msg)}`, request.url)
       )
     }
 
-    // Partial success or full success
     const successCount = pages.length - saveErrors.length
     if (saveErrors.length > 0) {
       return Response.redirect(
         new URL(
-          `/connected-accounts?success=facebook&warning=${encodeURIComponent(`${successCount} page(s) connected. ${saveErrors.length} failed to save.`)}`,
+          `/dashboard/connected-accounts?success=facebook&warning=${encodeURIComponent(`${successCount} page(s) connected. ${saveErrors.length} failed to save.`)}`,
           request.url
         )
       )
     }
 
     return Response.redirect(
-      new URL('/connected-accounts?success=facebook', request.url)
+      new URL('/dashboard/connected-accounts?success=facebook', request.url)
     )
   } catch (err) {
     const message = err instanceof Error ? err.message : 'An unexpected error occurred'
     return Response.redirect(
-      new URL(`/connected-accounts?error=${encodeURIComponent(message)}`, request.url)
+      new URL(`/dashboard/connected-accounts?error=${encodeURIComponent(message)}`, request.url)
     )
   }
 }
