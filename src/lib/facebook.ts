@@ -10,7 +10,11 @@ export interface FacebookPage {
   fan_count?: number
 }
 
-export async function exchangeCodeForAccessToken(code: string): Promise<string> {
+export async function exchangeCodeForAccessToken(code: string): Promise<string> {console.log("🔍 Checking env vars:")
+  console.log("NEXT_PUBLIC_FACEBOOK_APP_ID:", process.env.NEXT_PUBLIC_FACEBOOK_APP_ID)
+  console.log("FACEBOOK_APP_SECRET:", process.env.FACEBOOK_APP_SECRET ? "exists" : "missing")
+  console.log("NEXT_PUBLIC_SITE_URL:", process.env.NEXT_PUBLIC_SITE_URL)
+  
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://glistening-lolly-459fb1.netlify.app'
   
   const params = new URLSearchParams({
