@@ -1,3 +1,5 @@
+// src/middleware.ts
+
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
@@ -30,23 +32,29 @@ export async function middleware(request: NextRequest) {
     }
   )
 
+  // ✅ تحديث الجلسة - هذا ضروري للحفاظ على الجلسة
   let user = null
   try {
     const { data } = await supabase.auth.getUser()
     user = data.user
-  } catch {
+  } catch (error) {
+    console.error('Middleware auth error:', error)
     return supabaseResponse
   }
 
   const pathname = request.nextUrl.pathname
+
+  // ✅ السماح لجميع مسارات API بالمرور دون إعادة توجيه
+  if (pathname.startsWith('/api')) {
+    return supabaseResponse
+  }
 
   const isAuthPage = pathname.startsWith('/login') ||
     pathname.startsWith('/register') ||
     pathname.startsWith('/forgot-password') ||
     pathname.startsWith('/reset-password') ||
     pathname.startsWith('/verify-email') ||
-    pathname.startsWith('/resend-verification') ||
-    pathname.startsWith('/api/auth/callback')
+    pathname.startsWith('/resend-verification')
 
   const isDashboard = pathname.startsWith('/dashboard')
 
