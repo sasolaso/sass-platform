@@ -1,8 +1,11 @@
+// src/app/api/ai/generate/route.ts
+
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(request: NextRequest) {
-  const supabase = createClient()
+  // ✅ أضف await هنا
+  const supabase = await createClient()
 
   const {
     data: { user },
