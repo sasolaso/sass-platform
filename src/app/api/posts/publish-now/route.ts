@@ -1,10 +1,10 @@
 import { NextRequest } from 'next/server'
-import { createSupabaseServerClient } from '@/lib/supabase-server'
+import { createClient } from '@/lib/supabase/server'  // ✅ مسار صحيح
 import { createServiceClient } from '@/lib/supabase'
 import { publishPost } from '@/lib/social'
 
 export async function POST(request: NextRequest) {
-  const supabase = await createSupabaseServerClient()
+  const supabase = createClient()  // ✅ استخدم createClient
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
