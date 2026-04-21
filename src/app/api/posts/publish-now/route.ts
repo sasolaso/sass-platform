@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { createClient } from '@/lib/supabase/server'  // ✅ مسار صحيح
+import { createClient } from '@/lib/supabase/server'  
 import { createServiceClient } from '@/lib/supabase'
 import { publishPost } from '@/lib/social'
 
