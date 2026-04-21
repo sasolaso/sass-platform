@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, Suspense } from 'react'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/client'  // ✅ تغيير هنا
 import type { ConnectedAccount } from '@/types/database'
 import { Link2, Users, CircleAlert as AlertCircle, CircleCheck as CheckCircle2, Trash2, RefreshCw, Loader as Loader2 } from 'lucide-react'
 import { useSearchParams } from 'next/navigation'
@@ -71,19 +71,21 @@ function ConnectedAccountsContent() {
     setTimeout(() => setNotification(null), 5000)
   }
 
-  const loadAccounts = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+  // داخل الدوال، استخدم createClient() بدلاً من supabase
+const loadAccounts = useCallback(async () => {
+  const supabase = createClient()  // ✅ إضافة هذا السطر
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return
 
-    const { data } = await supabase
-      .from('connected_accounts')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
+  const { data } = await supabase
+    .from('connected_accounts')
+    .select('*')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false })
 
-    setAccounts(data || [])
-    setLoading(false)
-  }, [])
+  setAccounts(data || [])
+  setLoading(false)
+}, [])
 
   useEffect(() => {
     loadAccounts()
