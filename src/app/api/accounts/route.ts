@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(request: NextRequest) {
   try {
+    // ✅ أضف await هنا
     const supabase = await createClient()
 
     const {
@@ -35,6 +36,7 @@ export async function GET(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    // ✅ أضف await هنا
     const supabase = await createClient()
 
     const {
