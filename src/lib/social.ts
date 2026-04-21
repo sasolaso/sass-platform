@@ -1,15 +1,24 @@
 // src/lib/social.ts
 
-// ✅ الأسماء الصحيحة الموجودة في facebook.ts
-export { 
-  exchangeCodeForAccessToken,
-  getLongLivedToken as getLongLivedUserToken,
-  getUserPages,
+// ✅ استيراد الأسماء الصحيحة
+import { 
   publishPost as publishFacebookPost,
-  sendReply as sendFacebookReply
+  sendReply as sendFacebookReply,
+  getUserPages,
+  exchangeCodeForAccessToken,
+  getLongLivedToken as getLongLivedUserToken
 } from './facebook'
 
-// هذه الدوال غير موجودة حالياً، يمكن إضافتها لاحقاً عند الحاجة
+// تصديرها مرة أخرى للاستخدام في أماكن أخرى
+export {
+  getUserPages,
+  exchangeCodeForAccessToken,
+  getLongLivedUserToken,
+  publishFacebookPost,
+  sendFacebookReply
+}
+
+// هذه الدوال غير موجودة حالياً، سنعلقها مؤقتاً
 // export { publishInstagramPost, getInstagramAccounts, exchangeInstagramCode, getLongLivedInstagramToken } from './instagram'
 // export { publishTikTokPost, getTikTokUserInfo, exchangeTikTokCode } from './tiktok'
 // export { publishLinkedInPost, getLinkedInAccounts, exchangeLinkedInCode } from './linkedin'
@@ -23,32 +32,18 @@ export async function publishPost(
   mediaType: 'none' | 'image' | 'video',
   additionalImageUrls?: string[]
 ): Promise<{ id: string }> {
-  // ✅ استخدم الأسماء الصحيحة من facebook.ts
-  const { publishFacebookPost } = await import('./facebook')
-  
-  // هذه الدوال غير موجودة حالياً، سنعلقها مؤقتاً
-  // const { publishInstagramPost } = await import('./instagram')
-  // const { publishTikTokPost } = await import('./tiktok')
-  // const { publishLinkedInPost } = await import('./linkedin')
-
   switch (account.platform) {
     case 'facebook':
-      // ✅ publishFacebookPost موجودة في facebook.ts
       return publishFacebookPost(account.page_id || account.account_id, content, mediaUrl, mediaType, account.access_token, additionalImageUrls)
 
     // هذه المنصات غير مفعلة حالياً
-    // case 'instagram':
-    //   return publishInstagramPost(account.account_id, content, mediaUrl, mediaType, account.access_token)
-    //
-    // case 'tiktok':
-    //   if (!mediaUrl) throw new Error('TikTok requires a video URL')
-    //   return publishTikTokPost(account.account_id, content, mediaUrl, account.access_token)
-    //
-    // case 'linkedin':
-    //   return publishLinkedInPost(account.account_id, content, mediaUrl, mediaType, account.access_token)
+    case 'instagram':
+    case 'tiktok':
+    case 'linkedin':
+      throw new Error(`${account.platform} integration coming soon`)
 
     default:
-      throw new Error(`Unsupported platform: ${account.platform}. Only Facebook is currently supported.`)
+      throw new Error(`Unsupported platform: ${account.platform}`)
   }
 }
 
