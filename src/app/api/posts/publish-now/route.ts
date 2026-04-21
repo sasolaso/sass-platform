@@ -1,83 +1,74 @@
-import { NextRequest } from 'next/server'
-import { createClient } from '@/lib/supabase/server'  
-import { createServiceClient } from '@/lib/supabase'
-import { publishPost } from '@/lib/social'
+import { createClient } from '@/lib/supabase/server'
+import { publishPost } from '@/lib/facebook'
+import type { MediaType } from '@/lib/facebook'
+import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(request: NextRequest) {
-  const supabase = createClient()  // ✅ استخدم createClient
+  const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const body = await request.json()
+  const { connected_account_id, content, media_url, media_type } = body
+
+  if (!content?.trim()) {
+    return NextResponse.json({ error: 'Content is required' }, { status: 400 })
+  }
+  if (!connected_account_id) {
+    return NextResponse.json({ error: 'connected_account_id is required' }, { status: 400 })
   }
 
-  let body: {
-    connected_account_id: string
-    content: string
-    media_url?: string
-    media_type?: 'none' | 'image' | 'video'
-    additional_image_urls?: string[]
-  }
-
-  try {
-    body = await request.json()
-  } catch {
-    return Response.json({ error: 'Invalid JSON' }, { status: 400 })
-  }
-
-  const { connected_account_id, content, media_url, media_type = 'none', additional_image_urls } = body
-
-  if (!connected_account_id || !content) {
-    return Response.json({ error: 'connected_account_id and content are required' }, { status: 400 })
-  }
-
-  const serviceClient = createServiceClient()
-
-  const { data: account, error: accountError } = await serviceClient
+  const { data: account } = await supabase
     .from('connected_accounts')
-    .select('*')
+    .select('id, account_id, access_token, platform')
     .eq('id', connected_account_id)
     .eq('user_id', user.id)
+    .eq('is_active', true)
     .maybeSingle()
 
-  if (accountError || !account) {
-    return Response.json({ error: 'Account not found' }, { status: 404 })
+  if (!account) {
+    return NextResponse.json({ error: 'Connected account not found' }, { status: 404 })
   }
 
-  const { data: post, error: insertError } = await serviceClient
+  const now = new Date().toISOString()
+
+  const { data: post, error: insertError } = await supabase
     .from('scheduled_posts')
     .insert({
       user_id: user.id,
       connected_account_id,
       content,
       media_url: media_url || '',
-      media_type,
-      status: 'draft',
-      publish_now: true,
+      media_type: media_type || 'none',
+      status: 'publishing',
+      published_at: now,
     })
     .select()
     .single()
 
-  if (insertError || !post) {
-    return Response.json({ error: 'Failed to create post record' }, { status: 500 })
-  }
+  if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 })
 
   try {
-    const result = await publishPost(account, content, media_url || null, media_type, additional_image_urls)
+    const externalId = await publishPost(
+      account.account_id,
+      content,
+      media_url || '',
+      (media_type || 'none') as MediaType,
+      account.access_token
+    )
 
-    await serviceClient.from('scheduled_posts').update({
-      status: 'published',
-      published_at: new Date().toISOString(),
-    }).eq('id', post.id)
+    await supabase
+      .from('scheduled_posts')
+      .update({ status: 'published', published_at: now, error_message: '' })
+      .eq('id', post.id)
 
-    return Response.json({ success: true, external_id: result.id, post_id: post.id })
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error'
+    return NextResponse.json({ data: { post_id: post.id, external_id: externalId } })
+  } catch (err: any) {
+    await supabase
+      .from('scheduled_posts')
+      .update({ status: 'failed', error_message: err?.message || 'Unknown error' })
+      .eq('id', post.id)
 
-    await serviceClient.from('scheduled_posts').update({
-      status: 'failed',
-      error_message: message,
-    }).eq('id', post.id)
-
-    return Response.json({ error: message }, { status: 500 })
+    return NextResponse.json({ error: err?.message || 'Failed to publish' }, { status: 502 })
   }
 }

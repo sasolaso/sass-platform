@@ -1,500 +1,465 @@
+// src/app/dashboard/create-post/page.tsx
+
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
-import { createClient } from '@/lib/supabase/client'  // ✅ تغيير هنا
-import type { ConnectedAccount } from '@/types/database'
-import { Image as ImageIcon, Video, X, Calendar, Send, Clock, CircleAlert as AlertCircle, CircleCheck as CheckCircle2, Loader as Loader2, ChevronDown, Plus, ChevronLeft, ChevronRight } from 'lucide-react'
-import { PLATFORM_CHAR_LIMITS } from '@/lib/social'
+import React, { useState, useEffect, useRef } from 'react'
+import { Send, Save, Clock, Hash, X, Sparkles, Image as ImageIcon, Video, CircleAlert as AlertCircle, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
+import { Card } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { cn, getCharLimit } from '@/lib/utils'
+import { getPlatformIcon } from '@/components/ui/platform-icons'
+import { createClient } from '@/lib/supabase/client'
+import { uploadMedia } from '@/lib/supabase/storage'
 
-const PLATFORM_LABELS: Record<string, string> = {
-  facebook: 'Facebook',
-  instagram: 'Instagram',
-  tiktok: 'TikTok',
-  linkedin: 'LinkedIn',
-}
+type MediaType = 'none' | 'image' | 'video'
 
-const PLATFORM_COLORS: Record<string, string> = {
-  facebook: 'text-blue-600',
-  instagram: 'text-pink-600',
-  tiktok: 'text-slate-800',
-  linkedin: 'text-sky-700',
-}
-
-interface PlatformMediaConfig {
-  image: boolean
-  video: boolean
-  multiImage: boolean
-  accepts: string
-  maxImages: number
-}
-
-const PLATFORM_MEDIA: Record<string, PlatformMediaConfig> = {
-  facebook: { image: true, video: true, multiImage: true, accepts: 'image/jpeg,image/png,image/gif,video/mp4,video/mov', maxImages: 4 },
-  instagram: { image: true, video: true, multiImage: false, accepts: 'image/jpeg,image/png,video/mp4,video/mov', maxImages: 1 },
-  tiktok: { image: false, video: true, multiImage: false, accepts: 'video/mp4', maxImages: 1 },
-  linkedin: { image: true, video: true, multiImage: false, accepts: 'image/jpeg,image/png,video/mp4', maxImages: 1 },
-}
-
-interface MediaItem {
-  preview: string
-  url: string
-  type: 'image' | 'video'
+interface ConnectedAccount {
+  id: string
+  platform: string
+  account_name: string
+  avatar_url: string
 }
 
 export default function CreatePostPage() {
-  const fileInputRef = useRef<HTMLInputElement>(null)
   const [accounts, setAccounts] = useState<ConnectedAccount[]>([])
-  const [selectedAccountId, setSelectedAccountId] = useState('')
+  const [selectedAccountId, setSelectedAccountId] = useState<string>('')
   const [content, setContent] = useState('')
-  const [mediaItems, setMediaItems] = useState<MediaItem[]>([])
-  const [carouselIndex, setCarouselIndex] = useState(0)
+  const [hashtags, setHashtags] = useState<string[]>([])
+  const [hashtagInput, setHashtagInput] = useState('')
   const [scheduledAt, setScheduledAt] = useState('')
+  const [mediaUrl, setMediaUrl] = useState('')
+  const [mediaType, setMediaType] = useState<MediaType>('none')
+  const [mediaPreview, setMediaPreview] = useState<string | null>(null)
+  const [mediaUploading, setMediaUploading] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [aiLoading, setAiLoading] = useState(false)
   const [accountsLoading, setAccountsLoading] = useState(true)
-  const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const selectedAccount = accounts.find(a => a.id === selectedAccountId)
-  const platform = selectedAccount?.platform || 'facebook'
-  const charLimit = PLATFORM_CHAR_LIMITS[platform] || 2000
-  const mediaConfig: PlatformMediaConfig = PLATFORM_MEDIA[platform] ?? PLATFORM_MEDIA.facebook
-  const primaryMedia = mediaItems[0] ?? null
-  const isCarousel = mediaConfig.multiImage && mediaItems.length > 1
+  const charLimit = selectedAccount ? getCharLimit(selectedAccount.platform) : 63206
+  const fullContent = content + (hashtags.length ? '\n\n' + hashtags.map(h => `#${h}`).join(' ') : '')
+  const charsLeft = charLimit - fullContent.length
+  const isOverLimit = charsLeft < 0
 
-  function showNotification(type: 'success' | 'error', message: string) {
-    setNotification({ type, message })
-    setTimeout(() => setNotification(null), 6000)
+  useEffect(() => {
+    loadAccounts()
+  }, [])
+
+  const loadAccounts = async () => {
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    const { data } = await supabase
+      .from('connected_accounts')
+      .select('id, platform, account_name, avatar_url')
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+
+    setAccounts(data || [])
+    if (data && data.length > 0) setSelectedAccountId(data[0].id)
+    setAccountsLoading(false)
   }
 
-  // داخل الدوال، استخدم createClient() بدلاً من supabase
-const loadAccounts = useCallback(async () => {
-  const supabase = createClient()  // ✅ إضافة هذا السطر
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return
-  const { data } = await supabase
-    .from('connected_accounts')
-    .select('*')
-    .eq('user_id', user.id)
-    .eq('is_active', true)
-    .order('platform', { ascending: true })
-  setAccounts(data || [])
-  if (data?.length) setSelectedAccountId(data[0].id)
-  setAccountsLoading(false)
-}, [])
+  const addHashtag = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault()
+      const tag = hashtagInput.trim().replace(/^#/, '')
+      if (tag && !hashtags.includes(tag)) setHashtags([...hashtags, tag])
+      setHashtagInput('')
+    }
+  }
 
-  useEffect(() => { loadAccounts() }, [loadAccounts])
+  const removeHashtag = (tag: string) => setHashtags(hashtags.filter(h => h !== tag))
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files || [])
-    if (!files.length) return
+  // ✅ دالة معالجة رفع الملف (معدلة)
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
 
-    const remaining = mediaConfig.maxImages - mediaItems.length
-    if (remaining <= 0) {
-      showNotification('error', `Maximum ${mediaConfig.maxImages} file(s) allowed for ${PLATFORM_LABELS[platform]}`)
-      if (fileInputRef.current) fileInputRef.current.value = ''
+    const isVideo = file.type.startsWith('video/')
+    const isImage = file.type.startsWith('image/')
+
+    if (!isVideo && !isImage) {
+      toast.error('Please select an image or video file')
       return
     }
 
-    const toAdd = files.slice(0, remaining)
-    const newItems: MediaItem[] = []
-
-    for (const file of toAdd) {
-      const isVideo = file.type.startsWith('video/')
-      const isImage = file.type.startsWith('image/')
-      if (!isVideo && !isImage) continue
-      if (isVideo && !mediaConfig.video) { showNotification('error', `${PLATFORM_LABELS[platform]} does not support video`); continue }
-      if (isImage && !mediaConfig.image) { showNotification('error', `${PLATFORM_LABELS[platform]} requires video only`); continue }
-      const objectUrl = URL.createObjectURL(file)
-      newItems.push({ preview: objectUrl, url: objectUrl, type: isVideo ? 'video' : 'image' })
+    if (file.size > 50 * 1024 * 1024) {
+      toast.error('File size must be under 50MB')
+      return
     }
 
-    if (newItems.length > 0) {
-      setMediaItems(prev => {
-        const updated = [...prev, ...newItems]
-        setCarouselIndex(updated.length - 1)
-        return updated
-      })
+    // عرض المعاينة فوراً
+    const objectUrl = URL.createObjectURL(file)
+    setMediaPreview(objectUrl)
+    setMediaType(isVideo ? 'video' : 'image')
+    
+    // ✅ رفع الملف إلى Supabase
+    setMediaUploading(true)
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('User not found')
+      
+      const publicUrl = await uploadMedia(user.id, file, isVideo ? 'video' : 'image')
+      setMediaUrl(publicUrl)
+      console.log('✅ File uploaded to:', publicUrl)
+      toast.success('Media uploaded successfully!')
+    } catch (error) {
+      console.error('Upload error:', error)
+      toast.error('Failed to upload media. Please try again.')
+      removeMedia()
+    } finally {
+      setMediaUploading(false)
     }
+  }
+
+  const removeMedia = () => {
+    if (mediaPreview) URL.revokeObjectURL(mediaPreview)
+    setMediaPreview(null)
+    setMediaUrl('')
+    setMediaType('none')
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
-  function removeMedia(index: number) {
-    setMediaItems(prev => {
-      const updated = prev.filter((_, i) => i !== index)
-      setCarouselIndex(i => Math.min(i, Math.max(0, updated.length - 1)))
-      return updated
-    })
+  const handleAISuggest = async () => {
+    setAiLoading(true)
+    await new Promise(r => setTimeout(r, 1500))
+    setContent("Big things are happening! Our team has been working hard to bring you something truly special. Stay tuned for the big reveal coming very soon.")
+    setHashtags(['ComingSoon', 'Exciting', 'StayTuned'])
+    setAiLoading(false)
+    toast.success('AI content generated!')
   }
 
-  function clearAllMedia() {
-    setMediaItems([])
-    setCarouselIndex(0)
-    if (fileInputRef.current) fileInputRef.current.value = ''
-  }
-
-  async function handlePublishNow() {
-    if (!selectedAccountId) { showNotification('error', 'Please select an account'); return }
-    if (!content.trim() && mediaItems.length === 0) { showNotification('error', 'Please add content or media'); return }
-    if (platform === 'tiktok' && (mediaItems.length === 0 || mediaItems[0]?.type !== 'video')) {
-      showNotification('error', 'TikTok requires a video'); return
-    }
-    if (platform === 'instagram' && mediaItems.length === 0) {
-      showNotification('error', 'Instagram requires an image or video'); return
-    }
+  const handlePublishNow = async () => {
+    if (!content.trim()) { toast.error('Post content cannot be empty'); return }
+    if (!selectedAccountId) { toast.error('Please select a connected account'); return }
+    if (isOverLimit) { toast.error('Content exceeds character limit'); return }
 
     setLoading(true)
     try {
-      const mediaType = (primaryMedia?.type ?? 'none') as 'none' | 'image' | 'video'
-      const additionalImageUrls = mediaItems.slice(1).filter(m => m.type === 'image').map(m => m.url)
-
       const res = await fetch('/api/posts/publish-now', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           connected_account_id: selectedAccountId,
-          content: content.trim(),
-          media_url: primaryMedia?.url,
+          content: fullContent,
+          media_url: mediaUrl || '',
           media_type: mediaType,
-          additional_image_urls: additionalImageUrls.length > 0 ? additionalImageUrls : undefined,
         }),
       })
 
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Failed to publish')
-      showNotification('success', 'Post published successfully!')
-      setContent('')
-      clearAllMedia()
-    } catch (err) {
-      showNotification('error', err instanceof Error ? err.message : 'Failed to publish post')
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Failed to publish')
+
+      toast.success('Post published successfully!')
+      resetForm()
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to publish post')
     } finally {
       setLoading(false)
     }
   }
 
-  async function handleSchedule() {
-    if (!selectedAccountId) { showNotification('error', 'Please select an account'); return }
-    if (!content.trim() && mediaItems.length === 0) { showNotification('error', 'Please add content or media'); return }
-    if (!scheduledAt) { showNotification('error', 'Please select a date and time'); return }
-    if (new Date(scheduledAt) <= new Date()) { showNotification('error', 'Scheduled time must be in the future'); return }
+  const handleSchedule = async () => {
+    if (!content.trim()) { toast.error('Post content cannot be empty'); return }
+    if (!selectedAccountId) { toast.error('Please select a connected account'); return }
+    if (!scheduledAt) { toast.error('Please select a schedule date and time'); return }
+    if (isOverLimit) { toast.error('Content exceeds character limit'); return }
 
     setLoading(true)
     try {
-      const mediaType = (primaryMedia?.type ?? 'none') as 'none' | 'image' | 'video'
-      const additionalImageUrls = mediaItems.slice(1).filter(m => m.type === 'image').map(m => m.url)
-
       const res = await fetch('/api/posts/schedule', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           connected_account_id: selectedAccountId,
-          content: content.trim(),
-          media_url: primaryMedia?.url,
+          content: fullContent,
+          media_url: mediaUrl || '',
           media_type: mediaType,
-          additional_image_urls: additionalImageUrls.length > 0 ? additionalImageUrls : undefined,
-          scheduled_at: scheduledAt,
+          scheduled_at: new Date(scheduledAt).toISOString(),
         }),
       })
 
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Failed to schedule')
-      showNotification('success', `Post scheduled for ${new Date(scheduledAt).toLocaleString()}`)
-      setContent('')
-      setScheduledAt('')
-      clearAllMedia()
-    } catch (err) {
-      showNotification('error', err instanceof Error ? err.message : 'Failed to schedule post')
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Failed to schedule')
+
+      toast.success('Post scheduled successfully!')
+      resetForm()
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to schedule post')
     } finally {
       setLoading(false)
     }
   }
 
-  const charsUsed = content.length
-  const charsLeft = charLimit - charsUsed
-  const isOverLimit = charsLeft < 0
-  const isNearLimit = charsLeft < 50 && !isOverLimit
+  const handleSaveDraft = async () => {
+    if (!content.trim()) { toast.error('Post content cannot be empty'); return }
+
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    setLoading(true)
+    const { error } = await supabase.from('scheduled_posts').insert({
+      user_id: user.id,
+      connected_account_id: selectedAccountId || null,
+      content: fullContent,
+      media_url: mediaUrl || '',
+      media_type: mediaType,
+      status: 'draft',
+      hashtags,
+    })
+
+    setLoading(false)
+    if (error) { toast.error(error.message); return }
+    toast.success('Draft saved!')
+    resetForm()
+  }
+
+  const resetForm = () => {
+    setContent('')
+    setHashtags([])
+    setHashtagInput('')
+    setScheduledAt('')
+    removeMedia()
+  }
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-6 max-w-4xl">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Create Post</h1>
-        <p className="text-slate-500 mt-1 text-sm">Publish or schedule content across your platforms</p>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Create Post</h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Write and schedule content for your connected Facebook Pages.</p>
       </div>
 
-      {notification && (
-        <div className={`flex items-center gap-3 px-4 py-3 rounded-lg border text-sm ${
-          notification.type === 'success'
-            ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-            : 'bg-red-50 border-red-200 text-red-800'
-        }`}>
-          {notification.type === 'success'
-            ? <CheckCircle2 className="w-4 h-4 shrink-0" />
-            : <AlertCircle className="w-4 h-4 shrink-0" />
-          }
-          {notification.message}
-        </div>
+      {!accountsLoading && accounts.length === 0 && (
+        <Card className="border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20">
+          <div className="flex items-start gap-3">
+            <AlertCircle size={18} className="text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-amber-800 dark:text-amber-300">No connected accounts</p>
+              <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                You need to connect a Facebook Page before creating posts.{' '}
+                <a href="/dashboard/accounts" className="underline font-medium">Connect an account</a>
+              </p>
+            </div>
+          </div>
+        </Card>
       )}
 
-      <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-5">
-        {/* Account selector */}
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-2">Account</label>
-          {accountsLoading ? (
-            <div className="flex items-center gap-2 text-slate-400 text-sm">
-              <Loader2 className="w-4 h-4 animate-spin" />Loading accounts...
-            </div>
-          ) : accounts.length === 0 ? (
-            <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              No connected accounts.{' '}
-              <a href="/connected-accounts" className="underline font-medium">Connect one first</a>
-            </div>
-          ) : (
-            <div className="relative">
-              <select
-                value={selectedAccountId}
-                onChange={e => setSelectedAccountId(e.target.value)}
-                className="w-full pl-3.5 pr-9 py-2.5 appearance-none rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent bg-white"
-              >
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-5">
+          <Card>
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Publish to</p>
+            {accountsLoading ? (
+              <div className="h-10 bg-gray-100 dark:bg-gray-800 rounded-xl animate-pulse" />
+            ) : accounts.length === 0 ? (
+              <p className="text-sm text-gray-400 italic">No accounts connected</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
                 {accounts.map(account => (
-                  <option key={account.id} value={account.id}>
-                    {PLATFORM_LABELS[account.platform] || account.platform} — {account.account_name}
-                  </option>
+                  <button
+                    key={account.id}
+                    onClick={() => setSelectedAccountId(account.id)}
+                    className={cn(
+                      'flex items-center gap-2 px-3 py-2 rounded-xl border text-sm font-medium transition-all',
+                      selectedAccountId === account.id
+                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400'
+                        : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300'
+                    )}
+                  >
+                    {account.avatar_url ? (
+                      <img src={account.avatar_url} alt={account.account_name} className="w-5 h-5 rounded-full" />
+                    ) : (
+                      <span className="text-base">{getPlatformIcon(account.platform, 16)}</span>
+                    )}
+                    {account.account_name}
+                  </button>
                 ))}
-              </select>
-              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-            </div>
-          )}
-        </div>
-
-        {selectedAccount && (
-          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-            <span className={`font-medium ${PLATFORM_COLORS[platform]}`}>{PLATFORM_LABELS[platform]}</span>
-            <span>·</span>
-            <span>Max {charLimit.toLocaleString()} characters</span>
-            {platform === 'instagram' && <span>· Requires image or video</span>}
-            {platform === 'tiktok' && <span>· Video only</span>}
-            {mediaConfig.multiImage && (
-              <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded font-medium">
-                Up to {mediaConfig.maxImages} images (carousel)
-              </span>
+              </div>
             )}
-          </div>
-        )}
+          </Card>
 
-        {/* Content */}
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-2">Content</label>
-          <div className="relative">
+          <Card>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Post Content</p>
+              <Button variant="ghost" size="xs" onClick={handleAISuggest} loading={aiLoading} className="text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30">
+                <Sparkles size={14} />
+                AI Suggest
+              </Button>
+            </div>
             <textarea
               value={content}
               onChange={e => setContent(e.target.value)}
-              placeholder="Write your post content..."
-              rows={5}
-              className="w-full px-3.5 py-3 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent resize-none"
+              rows={8}
+              placeholder="What's on your mind? Write your post here..."
+              className="w-full bg-transparent text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none resize-none leading-relaxed"
             />
-            <div className={`absolute bottom-3 right-3 text-xs font-mono ${
-              isOverLimit ? 'text-red-500' : isNearLimit ? 'text-amber-500' : 'text-slate-300'
-            }`}>
-              {charsUsed}/{charLimit}
+            <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
+              <span className="text-xs text-gray-400">{charLimit.toLocaleString()} char limit</span>
+              <span className={cn('text-xs font-medium', isOverLimit ? 'text-red-500' : charsLeft < 100 ? 'text-amber-500' : 'text-gray-400')}>
+                {charsLeft.toLocaleString()} left
+              </span>
             </div>
-          </div>
-        </div>
+          </Card>
 
-        {/* Media */}
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <label className="block text-sm font-medium text-slate-700">
-              Media
-              {mediaItems.length > 0 && (
-                <span className="ml-2 text-xs font-normal text-slate-400">
-                  {mediaItems.length}/{mediaConfig.maxImages}
+          <Card>
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+              <Hash size={14} className="inline mr-1" />
+              Hashtags
+            </p>
+            <div className="flex flex-wrap gap-2 mb-3">
+              {hashtags.map(tag => (
+                <span key={tag} className="flex items-center gap-1 bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 text-xs px-2.5 py-1 rounded-full">
+                  #{tag}
+                  <button onClick={() => removeHashtag(tag)} className="hover:text-red-500 transition-colors"><X size={12} /></button>
                 </span>
-              )}
-            </label>
-            {mediaItems.length > 0 && (
-              <button onClick={clearAllMedia} className="text-xs text-red-500 hover:text-red-700 font-medium">
-                Remove all
-              </button>
-            )}
-          </div>
+              ))}
+            </div>
+            <input
+              value={hashtagInput}
+              onChange={e => setHashtagInput(e.target.value)}
+              onKeyDown={addHashtag}
+              placeholder="Type a hashtag and press Enter..."
+              className="w-full text-sm bg-gray-50 dark:bg-gray-800 rounded-lg px-3 py-2 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none border border-gray-200 dark:border-gray-700"
+            />
+          </Card>
 
-          {mediaItems.length > 0 ? (
-            <div className="space-y-3">
-              {/* Main viewer with carousel controls */}
-              <div className="relative rounded-xl overflow-hidden border border-slate-200 bg-slate-100 min-h-48 flex items-center justify-center">
-                {mediaItems[carouselIndex]?.type === 'image' ? (
-                  <img
-                    src={mediaItems[carouselIndex].preview}
-                    alt={`Media ${carouselIndex + 1}`}
-                    className="max-h-72 w-full object-contain"
-                  />
+          <Card>
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Media Attachment</p>
+            {mediaPreview ? (
+              <div className="relative rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800">
+                {mediaType === 'video' ? (
+                  <video src={mediaPreview} controls className="w-full max-h-64 object-contain" />
                 ) : (
-                  <video src={mediaItems[carouselIndex]?.preview} controls className="max-h-72 w-full" />
+                  <img src={mediaPreview} alt="Preview" className="w-full max-h-64 object-contain" />
                 )}
-
                 <button
-                  onClick={() => removeMedia(carouselIndex)}
-                  className="absolute top-2 right-2 w-7 h-7 bg-black/60 hover:bg-black/80 text-white rounded-full flex items-center justify-center transition-colors"
+                  onClick={removeMedia}
+                  disabled={mediaUploading}
+                  className="absolute top-2 right-2 p-1.5 bg-gray-900/70 text-white rounded-lg hover:bg-gray-900 transition-colors"
                 >
-                  <X className="w-3.5 h-3.5" />
+                  {mediaUploading ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />}
                 </button>
-
-                {isCarousel && (
-                  <div className="absolute top-2 left-2 px-2 py-0.5 bg-black/60 text-white text-xs rounded-full font-medium">
-                    Carousel · {mediaItems.length} images
-                  </div>
+                <div className="absolute bottom-2 left-2">
+                  <span className="text-xs bg-gray-900/70 text-white px-2 py-1 rounded-md capitalize">{mediaType}</span>
+                </div>
+              </div>
+            ) : (
+              <div
+                onClick={() => !mediaUploading && fileInputRef.current?.click()}
+                className={cn(
+                  'border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl p-8 text-center transition-all group',
+                  !mediaUploading && 'cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50/50 dark:hover:bg-blue-950/10'
                 )}
-
-                {mediaItems.length > 1 && (
+              >
+                {mediaUploading ? (
+                  <div className="flex flex-col items-center gap-2">
+                    <Loader2 size={24} className="animate-spin text-blue-500" />
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Uploading media...</p>
+                  </div>
+                ) : (
                   <>
-                    <button
-                      onClick={() => setCarouselIndex(i => Math.max(0, i - 1))}
-                      disabled={carouselIndex === 0}
-                      className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-black/50 hover:bg-black/70 disabled:opacity-20 text-white rounded-full flex items-center justify-center transition-colors"
-                    >
-                      <ChevronLeft className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => setCarouselIndex(i => Math.min(mediaItems.length - 1, i + 1))}
-                      disabled={carouselIndex === mediaItems.length - 1}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-black/50 hover:bg-black/70 disabled:opacity-20 text-white rounded-full flex items-center justify-center transition-colors"
-                    >
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
-                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5">
-                      {mediaItems.map((_, i) => (
-                        <button
-                          key={i}
-                          onClick={() => setCarouselIndex(i)}
-                          className={`w-2 h-2 rounded-full transition-colors ${i === carouselIndex ? 'bg-white' : 'bg-white/50'}`}
-                        />
-                      ))}
+                    <div className="flex items-center justify-center gap-3 text-gray-400 group-hover:text-blue-500 mb-2">
+                      <ImageIcon size={20} />
+                      <Video size={20} />
                     </div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Click to upload an image or video</p>
+                    <p className="text-xs text-gray-400 mt-1">Max 50MB</p>
                   </>
                 )}
               </div>
-
-              {/* Thumbnail strip + add more */}
-              {(mediaItems.length > 1 || (mediaConfig.multiImage && mediaItems.length < mediaConfig.maxImages)) && (
-                <div className="flex gap-2 overflow-x-auto pb-1">
-                  {mediaItems.map((item, i) => (
-                    <button
-                      key={i}
-                      onClick={() => setCarouselIndex(i)}
-                      className={`shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${
-                        i === carouselIndex ? 'border-sky-500' : 'border-slate-200 opacity-60 hover:opacity-100'
-                      }`}
-                    >
-                      {item.type === 'image' ? (
-                        <img src={item.preview} alt={`Thumb ${i + 1}`} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full bg-slate-800 flex items-center justify-center">
-                          <Video className="w-5 h-5 text-white" />
-                        </div>
-                      )}
-                    </button>
-                  ))}
-                  {mediaConfig.multiImage && mediaItems.length < mediaConfig.maxImages && (
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      className="shrink-0 w-16 h-16 rounded-lg border-2 border-dashed border-slate-200 hover:border-sky-400 hover:bg-sky-50 flex items-center justify-center transition-all"
-                      title="Add more images"
-                    >
-                      <Plus className="w-5 h-5 text-slate-400" />
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {/* Add more hint for single item */}
-              {mediaItems.length === 1 && mediaConfig.multiImage && mediaItems.length < mediaConfig.maxImages && (
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center gap-2 px-3 py-2 text-sm text-sky-600 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-lg transition-colors"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add more images for carousel ({mediaConfig.maxImages - mediaItems.length} remaining)
-                </button>
-              )}
-            </div>
-          ) : (
-            <div
-              onClick={() => fileInputRef.current?.click()}
-              className="flex flex-col items-center justify-center gap-2 p-8 rounded-xl border-2 border-dashed border-slate-200 hover:border-sky-300 hover:bg-sky-50/50 cursor-pointer transition-all"
-            >
-              <div className="flex gap-3 text-slate-300">
-                {mediaConfig.image && <ImageIcon className="w-7 h-7" />}
-                {mediaConfig.video && <Video className="w-7 h-7" />}
-              </div>
-              <p className="text-sm text-slate-500">Click to upload media</p>
-              {mediaConfig.multiImage && (
-                <p className="text-xs text-sky-500 font-medium">Carousel: upload up to {mediaConfig.maxImages} images</p>
-              )}
-              <p className="text-xs text-slate-400">{mediaConfig.accepts.replace(/,/g, ', ')}</p>
-            </div>
-          )}
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept={mediaConfig.accepts}
-            multiple={mediaConfig.multiImage}
-            onChange={handleFileChange}
-            className="hidden"
-          />
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,video/*"
+              onChange={handleFileChange}
+              className="hidden"
+              disabled={mediaUploading}
+            />
+          </Card>
         </div>
 
-        {/* Schedule */}
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-2">
-            Schedule Date & Time
-            <span className="text-slate-400 font-normal ml-1">(optional for publish now)</span>
-          </label>
-          <div className="relative">
-            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+        <div className="space-y-5">
+          <Card>
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+              <Clock size={14} className="inline mr-1" />
+              Schedule
+            </p>
             <input
               type="datetime-local"
               value={scheduledAt}
               onChange={e => setScheduledAt(e.target.value)}
-              min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
-              className="w-full pl-10 pr-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
+              min={new Date().toISOString().slice(0, 16)}
+              className="w-full text-sm bg-gray-50 dark:bg-gray-800 rounded-lg px-3 py-2 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-          </div>
-        </div>
+            {scheduledAt && (
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                Will publish on {new Date(scheduledAt).toLocaleString()}
+              </p>
+            )}
+          </Card>
 
-        <div className="flex gap-3 pt-1">
-          <button
-            onClick={handlePublishNow}
-            disabled={loading || accounts.length === 0 || isOverLimit}
-            className="flex items-center gap-2 px-5 py-2.5 bg-sky-500 hover:bg-sky-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg text-sm transition-colors"
-          >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-            Publish Now
-          </button>
-          <button
-            onClick={handleSchedule}
-            disabled={loading || accounts.length === 0 || !scheduledAt || isOverLimit}
-            className="flex items-center gap-2 px-5 py-2.5 bg-slate-700 hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg text-sm transition-colors"
-          >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Clock className="w-4 h-4" />}
-            Schedule
-          </button>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-xl border border-slate-200 p-6">
-        <h2 className="font-semibold text-slate-900 mb-4">Platform Guidelines</h2>
-        <div className="grid grid-cols-2 gap-3">
-          {[
-            { platform: 'Facebook', limit: '63,206 chars', media: 'Images, Videos · Carousel (2–4 images)', color: 'text-blue-600' },
-            { platform: 'Instagram', limit: '2,200 chars', media: 'Image/Video required', color: 'text-pink-600' },
-            { platform: 'TikTok', limit: '150 chars', media: 'Video only', color: 'text-slate-800' },
-            { platform: 'LinkedIn', limit: '3,000 chars', media: 'Images & Videos', color: 'text-sky-700' },
-          ].map(({ platform, limit, media, color }) => (
-            <div key={platform} className="p-3 rounded-lg bg-slate-50 border border-slate-100">
-              <div className={`text-sm font-semibold ${color}`}>{platform}</div>
-              <div className="text-xs text-slate-500 mt-0.5">{limit} · {media}</div>
+          <Card>
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Preview</p>
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3 min-h-[120px]">
+              <div className="flex items-center gap-2 mb-2">
+                {selectedAccount?.avatar_url ? (
+                  <img src={selectedAccount.avatar_url} alt="" className="w-8 h-8 rounded-full" />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white">
+                    {getPlatformIcon(selectedAccount?.platform || 'facebook', 14)}
+                  </div>
+                )}
+                <div>
+                  <div className="text-xs font-medium text-gray-900 dark:text-white">{selectedAccount?.account_name || 'Your Page'}</div>
+                  <div className="text-xs text-gray-400">Just now</div>
+                </div>
+              </div>
+              {mediaPreview && mediaType === 'image' && (
+                <img src={mediaPreview} alt="Post media" className="w-full rounded-lg mb-2 max-h-32 object-cover" />
+              )}
+              <p className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">
+                {content || <span className="text-gray-400 italic">Your post preview will appear here...</span>}
+                {hashtags.length > 0 && '\n\n' + hashtags.map(h => `#${h}`).join(' ')}
+              </p>
             </div>
-          ))}
+          </Card>
+
+          <div className="space-y-2.5">
+            <Button
+              className="w-full gap-2"
+              onClick={handlePublishNow}
+              loading={loading}
+              disabled={isOverLimit || accounts.length === 0 || mediaUploading}
+            >
+              <Send size={14} />
+              Publish Now
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full gap-2"
+              onClick={handleSchedule}
+              disabled={loading || isOverLimit || accounts.length === 0 || mediaUploading}
+            >
+              <Clock size={14} />
+              Schedule Post
+            </Button>
+            <Button
+              variant="ghost"
+              className="w-full gap-2"
+              onClick={handleSaveDraft}
+              disabled={loading}
+            >
+              <Save size={14} />
+              Save Draft
+            </Button>
+          </div>
         </div>
       </div>
     </div>

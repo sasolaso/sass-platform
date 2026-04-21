@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
   }
 
   const state = randomBytes(16).toString('hex')
-  const redirectUri = `${process.env.NEXT_PUBLIC_SITE_URL}/api/facebook/callback`
+  const redirectUri = `${SITE_URL}/api/facebook/callback`
 
   // ✅ استخدم v25.0
   const scope = [

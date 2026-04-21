@@ -1,93 +1,53 @@
-import { NextRequest } from 'next/server'
-import { createClient } from '@/lib/supabase/server'  // ✅ تغيير هنا
-import { createServiceClient } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/server'
+import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(request: NextRequest) {
-  const supabase = createClient()  // ✅ استخدم createClient
+  const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const body = await request.json()
+  const { connected_account_id, content, media_url, media_type, scheduled_at } = body
+
+  if (!content?.trim()) {
+    return NextResponse.json({ error: 'Content is required' }, { status: 400 })
   }
-
-  let body: {
-    connected_account_id: string
-    content: string
-    media_url?: string
-    media_type?: 'none' | 'image' | 'video'
-    scheduled_at: string
-  }
-
-  try {
-    body = await request.json()
-  } catch {
-    return Response.json({ error: 'Invalid JSON' }, { status: 400 })
-  }
-
-  const { connected_account_id, content, media_url, media_type = 'none', scheduled_at } = body
-
-  if (!connected_account_id || !content || !scheduled_at) {
-    return Response.json(
-      { error: 'connected_account_id, content, and scheduled_at are required' },
-      { status: 400 }
-    )
+  if (!scheduled_at) {
+    return NextResponse.json({ error: 'scheduled_at is required' }, { status: 400 })
   }
 
   const scheduledDate = new Date(scheduled_at)
   if (isNaN(scheduledDate.getTime()) || scheduledDate <= new Date()) {
-    return Response.json({ error: 'scheduled_at must be a future date' }, { status: 400 })
+    return NextResponse.json({ error: 'scheduled_at must be a future date' }, { status: 400 })
   }
 
-  const serviceClient = createServiceClient()
+  if (connected_account_id) {
+    const { data: account } = await supabase
+      .from('connected_accounts')
+      .select('id')
+      .eq('id', connected_account_id)
+      .eq('user_id', user.id)
+      .maybeSingle()
 
-  const { data: account } = await serviceClient
-    .from('connected_accounts')
-    .select('id')
-    .eq('id', connected_account_id)
-    .eq('user_id', user.id)
-    .maybeSingle()
-
-  if (!account) {
-    return Response.json({ error: 'Account not found' }, { status: 404 })
+    if (!account) {
+      return NextResponse.json({ error: 'Connected account not found' }, { status: 404 })
+    }
   }
 
-  const { data: post, error } = await serviceClient
+  const { data, error } = await supabase
     .from('scheduled_posts')
     .insert({
       user_id: user.id,
-      connected_account_id,
+      connected_account_id: connected_account_id || null,
       content,
       media_url: media_url || '',
-      media_type,
-      scheduled_at,
+      media_type: media_type || 'none',
+      scheduled_at: scheduledDate.toISOString(),
       status: 'scheduled',
     })
     .select()
     .single()
 
-  if (error || !post) {
-    return Response.json({ error: 'Failed to schedule post' }, { status: 500 })
-  }
-
-  return Response.json({ success: true, post_id: post.id, scheduled_at })
-}
-
-export async function GET(request: NextRequest) {
-  const supabase = createClient()  // ✅ استخدم createClient
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
-  const serviceClient = createServiceClient()
-  const { data: posts, error } = await serviceClient
-    .from('scheduled_posts')
-    .select('*, connected_accounts(account_name, platform, avatar_url)')
-    .eq('user_id', user.id)
-    .order('scheduled_at', { ascending: true })
-
-  if (error) {
-    return Response.json({ error: 'Failed to fetch posts' }, { status: 500 })
-  }
-
-  return Response.json({ posts })
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ data }, { status: 201 })
 }

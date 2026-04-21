@@ -1,5 +1,3 @@
-// src/app/(auth)/register/page.tsx
-
 'use client'
 
 import React, { useState } from 'react'
@@ -7,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Zap, Eye, EyeOff, Check, ArrowRight } from 'lucide-react'
 import { toast } from 'sonner'
-import { signUp, signInWithGoogle, signInWithFacebook } from '@/lib/auth'
+import { signUp, signInWithGoogle } from '@/lib/auth'
 import { useI18n } from '@/lib/i18n/context'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -23,14 +21,6 @@ function GoogleIcon() {
   )
 }
 
-function FacebookIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="#1877F2" xmlns="http://www.w3.org/2000/svg">
-      <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
-    </svg>
-  )
-}
-
 export default function RegisterPage() {
   const router = useRouter()
   const { t } = useI18n()
@@ -41,7 +31,6 @@ export default function RegisterPage() {
   const [agreed, setAgreed] = useState(false)
   const [loading, setLoading] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
-  const [facebookLoading, setFacebookLoading] = useState(false)
 
   const passwordStrength = password.length >= 8 ? (password.match(/[A-Z]/) && password.match(/[0-9]/) ? 'strong' : 'medium') : password.length > 0 ? 'weak' : ''
 
@@ -64,16 +53,6 @@ export default function RegisterPage() {
     const { error } = await signInWithGoogle()
     if (error) {
       setGoogleLoading(false)
-      toast.error(error.message)
-    }
-  }
-
-  // ✅ إضافة دالة التسجيل بواسطة فيسبوك
-  const handleFacebookSignup = async () => {
-    setFacebookLoading(true)
-    const { error } = await signInWithFacebook()
-    if (error) {
-      setFacebookLoading(false)
       toast.error(error.message)
     }
   }
@@ -102,37 +81,19 @@ export default function RegisterPage() {
             ))}
           </div>
 
-          {/* أزرار التسجيل عبر وسائل التواصل الاجتماعي */}
-          <div className="space-y-3 mb-5">
-            <button
-              type="button"
-              onClick={handleGoogleSignup}
-              disabled={googleLoading}
-              className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              {googleLoading ? (
-                <span className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <GoogleIcon />
-              )}
-              {googleLoading ? 'Connecting...' : 'Sign up with Google'}
-            </button>
-
-            {/* ✅ زر التسجيل بواسطة فيسبوك */}
-            <button
-              type="button"
-              onClick={handleFacebookSignup}
-              disabled={facebookLoading}
-              className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              {facebookLoading ? (
-                <span className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <FacebookIcon />
-              )}
-              {facebookLoading ? 'Connecting...' : 'Sign up with Facebook'}
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={handleGoogleSignup}
+            disabled={googleLoading}
+            className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed mb-5"
+          >
+            {googleLoading ? (
+              <span className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <GoogleIcon />
+            )}
+            {googleLoading ? 'Connecting...' : 'Sign up with Google'}
+          </button>
 
           <div className="relative mb-5">
             <div className="absolute inset-0 flex items-center">

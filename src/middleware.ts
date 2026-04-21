@@ -1,5 +1,3 @@
-// src/middleware.ts
-
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
@@ -11,28 +9,22 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next({ request })
   }
 
-  let response = NextResponse.next({
-    request: {
-      headers: request.headers,
-    },
-  })
+  let supabaseResponse = NextResponse.next({ request })
 
-  // ✅ استخدام الطريقة المتوافقة مع Netlify (get/set/remove بدلاً من getAll/setAll)
   const supabase = createServerClient(
     supabaseUrl,
     supabaseAnonKey,
     {
       cookies: {
-        get(name: string) {
-          return request.cookies.get(name)?.value
+        getAll() {
+          return request.cookies.getAll()
         },
-        set(name: string, value: string, options: any) {
-          request.cookies.set(name, value)
-          response.cookies.set(name, value, options)
-        },
-        remove(name: string, options: any) {
-          request.cookies.set(name, '')
-          response.cookies.set(name, '', { ...options, maxAge: 0 })
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
+          supabaseResponse = NextResponse.next({ request })
+          cookiesToSet.forEach(({ name, value, options }) =>
+            supabaseResponse.cookies.set(name, value, options)
+          )
         },
       },
     }
@@ -43,7 +35,7 @@ export async function middleware(request: NextRequest) {
     const { data } = await supabase.auth.getUser()
     user = data.user
   } catch {
-    return response
+    return supabaseResponse
   }
 
   const pathname = request.nextUrl.pathname
@@ -57,12 +49,6 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/api/auth/callback')
 
   const isDashboard = pathname.startsWith('/dashboard')
-  const isApiRoute = pathname.startsWith('/api')
-
-  // ✅ السماح لمسارات API بالمرور دون إعادة توجيه
-  if (isApiRoute) {
-    return response
-  }
 
   if (isDashboard && !user) {
     return NextResponse.redirect(new URL('/login', request.url))
@@ -80,7 +66,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
-  return response
+  return supabaseResponse
 }
 
 export const config = {

@@ -100,22 +100,6 @@ export async function signInWithGoogle() {
   })
 }
 
-// ✅ دالة تسجيل الدخول بواسطة فيسبوك
-export async function signInWithFacebook() {
-  const supabase = createClient()
-  const redirectTo = typeof window !== 'undefined'
-    ? `${window.location.origin}/api/auth/callback`
-    : '/api/auth/callback'
-
-  return supabase.auth.signInWithOAuth({
-    provider: 'facebook',
-    options: {
-      redirectTo,
-      scopes: 'email,public_profile',
-    },
-  })
-}
-
 export async function resendVerification(email: string) {
   const supabase = createClient()
   const redirectTo = typeof window !== 'undefined'
