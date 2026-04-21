@@ -1,9 +1,9 @@
 import { NextRequest } from 'next/server'
-import { createSupabaseServerClient } from '@/lib/supabase-server'
+import { createClient } from '@/lib/supabase/server'  // ✅ تغيير هنا
 import { createServiceClient } from '@/lib/supabase'
 
 export async function POST(request: NextRequest) {
-  const supabase = await createSupabaseServerClient()
+  const supabase = createClient()  // ✅ استخدم createClient
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  const supabase = await createSupabaseServerClient()
+  const supabase = createClient()  // ✅ استخدم createClient
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
