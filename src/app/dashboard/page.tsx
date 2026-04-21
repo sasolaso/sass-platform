@@ -1,3 +1,5 @@
+// src/app/dashboard/page.tsx
+
 import React from 'react'
 import { createClient } from '@/lib/supabase/server'
 import { DashboardHome } from '@/components/dashboard/DashboardHome'
@@ -5,7 +7,9 @@ import { DashboardHome } from '@/components/dashboard/DashboardHome'
 export const dynamic = 'force-dynamic'
 
 export default async function DashboardPage() {
-  const supabase = createClient()
+  // ✅ أضف await هنا
+  const supabase = await createClient()
+  
   const { data: { user } } = await supabase.auth.getUser()
 
   if (!user) return null
