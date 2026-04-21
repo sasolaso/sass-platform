@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/client'  // ✅ تغيير هنا
 import type { ConnectedAccount } from '@/types/database'
 import { Image as ImageIcon, Video, X, Calendar, Send, Clock, CircleAlert as AlertCircle, CircleCheck as CheckCircle2, Loader as Loader2, ChevronDown, Plus, ChevronLeft, ChevronRight } from 'lucide-react'
 import { PLATFORM_CHAR_LIMITS } from '@/lib/social'
@@ -65,19 +65,21 @@ export default function CreatePostPage() {
     setTimeout(() => setNotification(null), 6000)
   }
 
-  const loadAccounts = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-    const { data } = await supabase
-      .from('connected_accounts')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('is_active', true)
-      .order('platform', { ascending: true })
-    setAccounts(data || [])
-    if (data?.length) setSelectedAccountId(data[0].id)
-    setAccountsLoading(false)
-  }, [])
+  // داخل الدوال، استخدم createClient() بدلاً من supabase
+const loadAccounts = useCallback(async () => {
+  const supabase = createClient()  // ✅ إضافة هذا السطر
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return
+  const { data } = await supabase
+    .from('connected_accounts')
+    .select('*')
+    .eq('user_id', user.id)
+    .eq('is_active', true)
+    .order('platform', { ascending: true })
+  setAccounts(data || [])
+  if (data?.length) setSelectedAccountId(data[0].id)
+  setAccountsLoading(false)
+}, [])
 
   useEffect(() => { loadAccounts() }, [loadAccounts])
 
