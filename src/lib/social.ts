@@ -1,4 +1,7 @@
-export { publishFacebookPost, sendFacebookReply, getUserPages, exchangeCodeForAccessToken, getLongLivedUserToken } from './facebook'
+// src/lib/social.ts
+
+// ✅ تغيير الاستيرادات لتتناسب مع الأسماء الموجودة فعلاً
+export { publishPost as publishFacebookPost, sendReply as sendFacebookReply, getUserPages, exchangeCodeForAccessToken, getLongLivedToken as getLongLivedUserToken } from './facebook'
 export { publishInstagramPost, getInstagramAccounts, exchangeInstagramCode, getLongLivedInstagramToken } from './instagram'
 export { publishTikTokPost, getTikTokUserInfo, exchangeTikTokCode } from './tiktok'
 export { publishLinkedInPost, getLinkedInAccounts, exchangeLinkedInCode } from './linkedin'
@@ -12,6 +15,7 @@ export async function publishPost(
   mediaType: 'none' | 'image' | 'video',
   additionalImageUrls?: string[]
 ): Promise<{ id: string }> {
+  // ✅ استخدم الأسماء الصحيحة
   const { publishFacebookPost } = await import('./facebook')
   const { publishInstagramPost } = await import('./instagram')
   const { publishTikTokPost } = await import('./tiktok')
