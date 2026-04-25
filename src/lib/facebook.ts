@@ -1,17 +1,36 @@
 // src/lib/facebook.ts
 
 const GRAPH_API = 'https://graph.facebook.com/v25.0'
+
+// ✅ helper للتأكد من ENV
+function getFacebookEnv() {
+  const appId = process.env.FACEBOOK_APP_ID
+  const appSecret = process.env.FACEBOOK_APP_SECRET
+
+  if (!appId || !appSecret) {
+    console.error('❌ Facebook ENV missing:', { appId, appSecret })
+    throw new Error('Facebook configuration error')
+  }
+
+  return { appId, appSecret }
+}
+
 export async function exchangeCodeForAccessToken(code: string, redirectUri: string): Promise<string> {
-  // ✅ اصلاح: استخدام NEXT_PUBLIC_FACEBOOK_APP_ID
+  const { appId, appSecret } = getFacebookEnv()
+
+  console.log('🔑 Using APP_ID:', appId)
+
   const params = new URLSearchParams({
-    client_id: process.env.NEXT_PUBLIC_FACEBOOK_APP_ID!,
-    client_secret: process.env.FACEBOOK_APP_SECRET!,
+    client_id: appId,
+    client_secret: appSecret,
     redirect_uri: redirectUri,
     code,
   })
 
   const res = await fetch(`${GRAPH_API}/oauth/access_token?${params}`)
   const json = await res.json()
+
+  console.log('📥 Token response:', json)
 
   if (!res.ok || json.error) {
     throw new Error(json.error?.message || 'Failed to exchange code for access token')
@@ -21,11 +40,12 @@ export async function exchangeCodeForAccessToken(code: string, redirectUri: stri
 }
 
 export async function getLongLivedToken(shortLivedToken: string): Promise<string> {
-  // ✅ اصلاح: استخدام NEXT_PUBLIC_FACEBOOK_APP_ID
+  const { appId, appSecret } = getFacebookEnv()
+
   const params = new URLSearchParams({
     grant_type: 'fb_exchange_token',
-    client_id: process.env.NEXT_PUBLIC_FACEBOOK_APP_ID!,
-    client_secret: process.env.FACEBOOK_APP_SECRET!,
+    client_id: appId,
+    client_secret: appSecret,
     fb_exchange_token: shortLivedToken,
   })
 
@@ -134,13 +154,12 @@ export async function sendReply(
 }
 
 export function buildOAuthUrl(redirectUri: string, state: string): string {
-  const appId = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID
-  
+  const appId = process.env.FACEBOOK_APP_ID
+
   if (!appId) {
-    throw new Error('NEXT_PUBLIC_FACEBOOK_APP_ID is not defined')
+    throw new Error('FACEBOOK_APP_ID is not defined')
   }
 
-  // ✅ استخدم v25.0 بدلاً من v19.0
   const params = new URLSearchParams({
     client_id: appId,
     redirect_uri: redirectUri,
