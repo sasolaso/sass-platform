@@ -10,7 +10,7 @@ export const revalidate = 0
 export async function GET() {
   try {
     // ✅ أضف await هنا
-    const supabase = await createClient()
+    const supabase = await createClient() 
 
     const now = new Date().toISOString()
 
