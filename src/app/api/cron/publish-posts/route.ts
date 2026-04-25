@@ -1,49 +1,76 @@
+// src/app/api/cron/publish-posts/route.ts
+
 import { createClient } from '@/lib/supabase/server'
-import { NextRequest, NextResponse } from 'next/server'
+import { publishPost } from '@/lib/social'
+import { NextResponse } from 'next/server'
 
-export async function POST(request: NextRequest) {
-  const authHeader = request.headers.get('authorization')
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
+export async function GET() {
+  try {
+    // ✅ أضف await هنا
+    const supabase = await createClient()
+
+    const now = new Date().toISOString()
+
+    const { data: posts, error: fetchError } = await supabase
+      .from('scheduled_posts')
+      .select('*, post_platforms(*)')
+      .eq('status', 'scheduled')
+      .lte('scheduled_at', now)
+
+    if (fetchError) {
+      console.error('Error fetching scheduled posts:', fetchError)
+      return NextResponse.json({ error: fetchError.message }, { status: 500 })
+    }
+
+    if (!posts || posts.length === 0) {
+      return NextResponse.json({ message: 'No pending scheduled posts', count: 0 })
+    }
+
+    let publishedCount = 0
+    let failedCount = 0
+
+    for (const post of posts) {
+      try {
+        for (const platform of post.post_platforms || []) {
+          const account = await supabase
+            .from('connected_accounts')
+            .select('*')
+            .eq('id', platform.connected_account_id)
+            .single()
+
+          if (account.data) {
+            await publishPost(
+              account.data,
+              post.content,
+              post.media_url,
+              post.media_type,
+              post.additional_image_urls || []
+            )
+          }
+        }
+
+        await supabase
+          .from('scheduled_posts')
+          .update({ status: 'published', published_at: new Date().toISOString() })
+          .eq('id', post.id)
+
+        publishedCount++
+      } catch (err) {
+        console.error(`Failed to publish post ${post.id}:`, err)
+        await supabase
+          .from('scheduled_posts')
+          .update({ status: 'failed', error_message: String(err) })
+          .eq('id', post.id)
+        failedCount++
+      }
+    }
+
+    return NextResponse.json({ published: publishedCount, failed: failedCount })
+  } catch (err) {
+    console.error('Cron job error:', err)
+    return NextResponse.json({ error: String(err) }, { status: 500 })
   }
-
-  const supabase = createClient()
-
-  const now = new Date().toISOString()
-
-  const { data: posts, error: fetchError } = await supabase
-    .from('scheduled_posts')
-    .select('*, post_platforms(*)')
-    .eq('status', 'scheduled')
-    .lte('scheduled_at', now)
-
-  if (fetchError) return NextResponse.json({ error: fetchError.message }, { status: 500 })
-
-  if (!posts || posts.length === 0) {
-    return NextResponse.json({ data: { published: 0, message: 'No posts to publish' } })
-  }
-
-  const postIds = posts.map((p) => p.id)
-
-  const { error: updateError } = await supabase
-    .from('scheduled_posts')
-    .update({ status: 'published', published_at: now })
-    .in('id', postIds)
-
-  if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 })
-
-  const publishedLogs = posts.map((post) => ({
-    post_id: post.id,
-    user_id: post.user_id,
-    published_at: now,
-    platforms: (post.post_platforms ?? []).map((pp: { platform: string }) => pp.platform),
-  }))
-
-  const { error: logError } = await supabase
-    .from('published_posts')
-    .insert(publishedLogs)
-
-  if (logError) return NextResponse.json({ error: logError.message }, { status: 500 })
-
-  return NextResponse.json({ data: { published: posts.length, post_ids: postIds } })
 }
