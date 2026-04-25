@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const supabase = createClient()
+  const supabase = await createClient()
   const now = new Date().toISOString()
 
   const { data: posts, error: fetchError } = await supabase
